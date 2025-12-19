@@ -16,10 +16,10 @@ pin-depends: [
   ["perennial.dev"             "git+https://github.com/mit-pdos/perennial#4bd989e3f7"]
 
   ## begin indirect
-  ["coq-record-update.dev"     "git+https://github.com/tchajed/coq-record-update#7b26452103"]
-  ["iris-named-props.dev"      "git+https://github.com/tchajed/iris-named-props#c388714a93"]
-  ["rocq-iris.dev"             "git+https://gitlab.mpi-sws.org/iris/iris#d8f049ee6e"]
-  ["rocq-stdpp.dev"            "git+https://gitlab.mpi-sws.org/iris/stdpp#a09c2a19de"]
+  ["coq-record-update.dev"     "git+https://github.com/tchajed/coq-record-update#7b2645210331c3ec4ed75fa5ad0840a723f25151"]
+  ["rocq-stdpp.dev"            "git+https://gitlab.mpi-sws.org/iris/stdpp#a09c2a19de6898fd470983ca2363ade519d70fe1"]
+  ["rocq-iris.dev"             "git+https://gitlab.mpi-sws.org/iris/iris#d8f049ee6e28201a8781622ab4390a62c5293a85"]
+  ["iris-named-props.dev"      "git+https://github.com/tchajed/iris-named-props#c388714a93b1c043ed42a3f446280abd5113d26f"]
   ## end
 ]
 
