@@ -1,6 +1,6 @@
 module github.com/sanjit-bhat/pav-proof
 
-go 1.24
+go 1.24.0
 
 tool (
 	github.com/goose-lang/goose/cmd/goose
