@@ -41,12 +41,10 @@ endif
 clean:
 	@echo "CLEAN vo glob aux"
 	$(Q)find $(SRC_DIR) \( -name "*.vo" -o -name "*.vo[sk]" \
-		-o -name ".*.aux" -o -name ".*.cache" -o -name "*.glob" \) -delete
-	$(Q)for dir in $(SRC_DIR)/code $(SRC_DIR)/generatedproof; do \
-		if test -d "$$dir"; then find "$$dir" -name "*.v" -delete; fi \
-	done
-	$(Q)rm -f .goose-output
-	$(Q)rm -f .rocqdeps.d
+		-o -name ".*.aux" -o -name ".*.cache" -name "*.glob" \) -delete
+	$(Q)rm -f .lia.cache
+	$(Q)rm -f $(TIMING_DB)
+	rm -f .rocqdeps.d tests/.rocqdeps.d
 
 .PHONY: default
 .DELETE_ON_ERROR:
