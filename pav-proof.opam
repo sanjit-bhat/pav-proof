@@ -13,7 +13,7 @@ depends: [
 ]
 
 pin-depends: [
-  ["perennial.dev"             "git+https://github.com/mit-pdos/perennial#4bd989e3f7"]
+  ["perennial.dev"             "git+https://github.com/mit-pdos/perennial#fac4ae3bc"]
 
   ## begin indirect
   ["coq-record-update.dev"     "git+https://github.com/tchajed/coq-record-update#7b2645210331c3ec4ed75fa5ad0840a723f25151"]
