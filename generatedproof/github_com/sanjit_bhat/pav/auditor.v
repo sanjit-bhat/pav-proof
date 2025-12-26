@@ -26,9 +26,7 @@ Context `{ffi_syntax}.
 Record t := mk {
   mu' : loc;
   sk' : loc;
-  lastDig' : slice.t;
-  startEp' : w64;
-  hist' : slice.t;
+  hist' : loc;
   serv' : loc;
 }.
 End def.
@@ -43,14 +41,12 @@ Global Instance Auditor_wf : struct.Wf auditor.Auditor.
 Proof. apply _. Qed.
 
 Global Instance settable_Auditor : Settable Auditor.t :=
-  settable! Auditor.mk < Auditor.mu'; Auditor.sk'; Auditor.lastDig'; Auditor.startEp'; Auditor.hist'; Auditor.serv' >.
+  settable! Auditor.mk < Auditor.mu'; Auditor.sk'; Auditor.hist'; Auditor.serv' >.
 Global Instance into_val_Auditor : IntoVal Auditor.t :=
   {| to_val_def v :=
     struct.val_aux auditor.Auditor [
     "mu" ::= #(Auditor.mu' v);
     "sk" ::= #(Auditor.sk' v);
-    "lastDig" ::= #(Auditor.lastDig' v);
-    "startEp" ::= #(Auditor.startEp' v);
     "hist" ::= #(Auditor.hist' v);
     "serv" ::= #(Auditor.serv' v)
     ]%struct
@@ -58,7 +54,7 @@ Global Instance into_val_Auditor : IntoVal Auditor.t :=
 
 Global Program Instance into_val_typed_Auditor : IntoValTyped Auditor.t auditor.Auditor :=
 {|
-  default_val := Auditor.mk (default_val _) (default_val _) (default_val _) (default_val _) (default_val _) (default_val _);
+  default_val := Auditor.mk (default_val _) (default_val _) (default_val _) (default_val _);
 |}.
 Next Obligation. solve_to_val_type. Qed.
 Next Obligation. solve_zero_val. Qed.
@@ -71,12 +67,6 @@ Proof. solve_into_val_struct_field. Qed.
 Global Instance into_val_struct_field_Auditor_sk : IntoValStructField "sk" auditor.Auditor Auditor.sk'.
 Proof. solve_into_val_struct_field. Qed.
 
-Global Instance into_val_struct_field_Auditor_lastDig : IntoValStructField "lastDig" auditor.Auditor Auditor.lastDig'.
-Proof. solve_into_val_struct_field. Qed.
-
-Global Instance into_val_struct_field_Auditor_startEp : IntoValStructField "startEp" auditor.Auditor Auditor.startEp'.
-Proof. solve_into_val_struct_field. Qed.
-
 Global Instance into_val_struct_field_Auditor_hist : IntoValStructField "hist" auditor.Auditor Auditor.hist'.
 Proof. solve_into_val_struct_field. Qed.
 
@@ -85,17 +75,15 @@ Proof. solve_into_val_struct_field. Qed.
 
 
 Context `{!ffi_model, !ffi_semantics _ _, !ffi_interp _, !heapGS Σ}.
-Global Instance wp_struct_make_Auditor mu' sk' lastDig' startEp' hist' serv':
+Global Instance wp_struct_make_Auditor mu' sk' hist' serv':
   PureWp True
     (struct.make #auditor.Auditor (alist_val [
       "mu" ::= #mu';
       "sk" ::= #sk';
-      "lastDig" ::= #lastDig';
-      "startEp" ::= #startEp';
       "hist" ::= #hist';
       "serv" ::= #serv'
     ]))%struct
-    #(Auditor.mk mu' sk' lastDig' startEp' hist' serv').
+    #(Auditor.mk mu' sk' hist' serv').
 Proof. solve_struct_make_pure_wp. Qed.
 
 
@@ -103,8 +91,6 @@ Global Instance Auditor_struct_fields_split dq l (v : Auditor.t) :
   StructFieldsSplit dq l v (
     "Hmu" ∷ l ↦s[auditor.Auditor :: "mu"]{dq} v.(Auditor.mu') ∗
     "Hsk" ∷ l ↦s[auditor.Auditor :: "sk"]{dq} v.(Auditor.sk') ∗
-    "HlastDig" ∷ l ↦s[auditor.Auditor :: "lastDig"]{dq} v.(Auditor.lastDig') ∗
-    "HstartEp" ∷ l ↦s[auditor.Auditor :: "startEp"]{dq} v.(Auditor.startEp') ∗
     "Hhist" ∷ l ↦s[auditor.Auditor :: "hist"]{dq} v.(Auditor.hist') ∗
     "Hserv" ∷ l ↦s[auditor.Auditor :: "serv"]{dq} v.(Auditor.serv')
   ).
@@ -116,8 +102,6 @@ Proof.
   rewrite -!/(typed_pointsto_def _ _ _) -!typed_pointsto_unseal.
   simpl_one_flatten_struct (# (Auditor.mu' v)) (auditor.Auditor) "mu"%go.
   simpl_one_flatten_struct (# (Auditor.sk' v)) (auditor.Auditor) "sk"%go.
-  simpl_one_flatten_struct (# (Auditor.lastDig' v)) (auditor.Auditor) "lastDig"%go.
-  simpl_one_flatten_struct (# (Auditor.startEp' v)) (auditor.Auditor) "startEp"%go.
   simpl_one_flatten_struct (# (Auditor.hist' v)) (auditor.Auditor) "hist"%go.
 
   solve_field_ref_f.
@@ -130,9 +114,9 @@ Module history.
 Section def.
 Context `{ffi_syntax}.
 Record t := mk {
-  link' : slice.t;
-  servSig' : slice.t;
-  adtrSig' : slice.t;
+  lastDig' : slice.t;
+  startEp' : w64;
+  epochs' : slice.t;
 }.
 End def.
 End history.
@@ -146,13 +130,13 @@ Global Instance history_wf : struct.Wf auditor.history.
 Proof. apply _. Qed.
 
 Global Instance settable_history : Settable history.t :=
-  settable! history.mk < history.link'; history.servSig'; history.adtrSig' >.
+  settable! history.mk < history.lastDig'; history.startEp'; history.epochs' >.
 Global Instance into_val_history : IntoVal history.t :=
   {| to_val_def v :=
     struct.val_aux auditor.history [
-    "link" ::= #(history.link' v);
-    "servSig" ::= #(history.servSig' v);
-    "adtrSig" ::= #(history.adtrSig' v)
+    "lastDig" ::= #(history.lastDig' v);
+    "startEp" ::= #(history.startEp' v);
+    "epochs" ::= #(history.epochs' v)
     ]%struct
   |}.
 
@@ -165,33 +149,33 @@ Next Obligation. solve_zero_val. Qed.
 Next Obligation. solve_to_val_inj. Qed.
 Final Obligation. solve_decision. Qed.
 
-Global Instance into_val_struct_field_history_link : IntoValStructField "link" auditor.history history.link'.
+Global Instance into_val_struct_field_history_lastDig : IntoValStructField "lastDig" auditor.history history.lastDig'.
 Proof. solve_into_val_struct_field. Qed.
 
-Global Instance into_val_struct_field_history_servSig : IntoValStructField "servSig" auditor.history history.servSig'.
+Global Instance into_val_struct_field_history_startEp : IntoValStructField "startEp" auditor.history history.startEp'.
 Proof. solve_into_val_struct_field. Qed.
 
-Global Instance into_val_struct_field_history_adtrSig : IntoValStructField "adtrSig" auditor.history history.adtrSig'.
+Global Instance into_val_struct_field_history_epochs : IntoValStructField "epochs" auditor.history history.epochs'.
 Proof. solve_into_val_struct_field. Qed.
 
 
 Context `{!ffi_model, !ffi_semantics _ _, !ffi_interp _, !heapGS Σ}.
-Global Instance wp_struct_make_history link' servSig' adtrSig':
+Global Instance wp_struct_make_history lastDig' startEp' epochs':
   PureWp True
     (struct.make #auditor.history (alist_val [
-      "link" ::= #link';
-      "servSig" ::= #servSig';
-      "adtrSig" ::= #adtrSig'
+      "lastDig" ::= #lastDig';
+      "startEp" ::= #startEp';
+      "epochs" ::= #epochs'
     ]))%struct
-    #(history.mk link' servSig' adtrSig').
+    #(history.mk lastDig' startEp' epochs').
 Proof. solve_struct_make_pure_wp. Qed.
 
 
 Global Instance history_struct_fields_split dq l (v : history.t) :
   StructFieldsSplit dq l v (
-    "Hlink" ∷ l ↦s[auditor.history :: "link"]{dq} v.(history.link') ∗
-    "HservSig" ∷ l ↦s[auditor.history :: "servSig"]{dq} v.(history.servSig') ∗
-    "HadtrSig" ∷ l ↦s[auditor.history :: "adtrSig"]{dq} v.(history.adtrSig')
+    "HlastDig" ∷ l ↦s[auditor.history :: "lastDig"]{dq} v.(history.lastDig') ∗
+    "HstartEp" ∷ l ↦s[auditor.history :: "startEp"]{dq} v.(history.startEp') ∗
+    "Hepochs" ∷ l ↦s[auditor.history :: "epochs"]{dq} v.(history.epochs')
   ).
 Proof.
   rewrite /named.
@@ -199,8 +183,90 @@ Proof.
   unfold_typed_pointsto; split_pointsto_app.
 
   rewrite -!/(typed_pointsto_def _ _ _) -!typed_pointsto_unseal.
-  simpl_one_flatten_struct (# (history.link' v)) (auditor.history) "link"%go.
-  simpl_one_flatten_struct (# (history.servSig' v)) (auditor.history) "servSig"%go.
+  simpl_one_flatten_struct (# (history.lastDig' v)) (auditor.history) "lastDig"%go.
+  simpl_one_flatten_struct (# (history.startEp' v)) (auditor.history) "startEp"%go.
+
+  solve_field_ref_f.
+Qed.
+
+End instances.
+
+(* type auditor.epoch *)
+Module epoch.
+Section def.
+Context `{ffi_syntax}.
+Record t := mk {
+  link' : slice.t;
+  servSig' : slice.t;
+  adtrSig' : slice.t;
+}.
+End def.
+End epoch.
+
+Section instances.
+Context `{ffi_syntax}.
+#[local] Transparent auditor.epoch.
+#[local] Typeclasses Transparent auditor.epoch.
+
+Global Instance epoch_wf : struct.Wf auditor.epoch.
+Proof. apply _. Qed.
+
+Global Instance settable_epoch : Settable epoch.t :=
+  settable! epoch.mk < epoch.link'; epoch.servSig'; epoch.adtrSig' >.
+Global Instance into_val_epoch : IntoVal epoch.t :=
+  {| to_val_def v :=
+    struct.val_aux auditor.epoch [
+    "link" ::= #(epoch.link' v);
+    "servSig" ::= #(epoch.servSig' v);
+    "adtrSig" ::= #(epoch.adtrSig' v)
+    ]%struct
+  |}.
+
+Global Program Instance into_val_typed_epoch : IntoValTyped epoch.t auditor.epoch :=
+{|
+  default_val := epoch.mk (default_val _) (default_val _) (default_val _);
+|}.
+Next Obligation. solve_to_val_type. Qed.
+Next Obligation. solve_zero_val. Qed.
+Next Obligation. solve_to_val_inj. Qed.
+Final Obligation. solve_decision. Qed.
+
+Global Instance into_val_struct_field_epoch_link : IntoValStructField "link" auditor.epoch epoch.link'.
+Proof. solve_into_val_struct_field. Qed.
+
+Global Instance into_val_struct_field_epoch_servSig : IntoValStructField "servSig" auditor.epoch epoch.servSig'.
+Proof. solve_into_val_struct_field. Qed.
+
+Global Instance into_val_struct_field_epoch_adtrSig : IntoValStructField "adtrSig" auditor.epoch epoch.adtrSig'.
+Proof. solve_into_val_struct_field. Qed.
+
+
+Context `{!ffi_model, !ffi_semantics _ _, !ffi_interp _, !heapGS Σ}.
+Global Instance wp_struct_make_epoch link' servSig' adtrSig':
+  PureWp True
+    (struct.make #auditor.epoch (alist_val [
+      "link" ::= #link';
+      "servSig" ::= #servSig';
+      "adtrSig" ::= #adtrSig'
+    ]))%struct
+    #(epoch.mk link' servSig' adtrSig').
+Proof. solve_struct_make_pure_wp. Qed.
+
+
+Global Instance epoch_struct_fields_split dq l (v : epoch.t) :
+  StructFieldsSplit dq l v (
+    "Hlink" ∷ l ↦s[auditor.epoch :: "link"]{dq} v.(epoch.link') ∗
+    "HservSig" ∷ l ↦s[auditor.epoch :: "servSig"]{dq} v.(epoch.servSig') ∗
+    "HadtrSig" ∷ l ↦s[auditor.epoch :: "adtrSig"]{dq} v.(epoch.adtrSig')
+  ).
+Proof.
+  rewrite /named.
+  apply struct_fields_split_intro.
+  unfold_typed_pointsto; split_pointsto_app.
+
+  rewrite -!/(typed_pointsto_def _ _ _) -!typed_pointsto_unseal.
+  simpl_one_flatten_struct (# (epoch.link' v)) (auditor.epoch) "link"%go.
+  simpl_one_flatten_struct (# (epoch.servSig' v)) (auditor.epoch) "servSig"%go.
 
   solve_field_ref_f.
 Qed.
@@ -727,6 +793,10 @@ Global Instance wp_method_call_Auditor'ptr_Get :
 
 Global Instance wp_method_call_Auditor'ptr_Update :
   WpMethodCall (ptrT.id auditor.Auditor.id) "Update" _ (is_pkg_defined auditor) :=
+  ltac:(solve_wp_method_call).
+
+Global Instance wp_method_call_Auditor'ptr_updOnce :
+  WpMethodCall (ptrT.id auditor.Auditor.id) "updOnce" _ (is_pkg_defined auditor) :=
   ltac:(solve_wp_method_call).
 
 End names.

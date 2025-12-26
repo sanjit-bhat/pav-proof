@@ -36,8 +36,8 @@ Definition runAlice : go_string := "github.com/sanjit-bhat/pav/alicebob.runAlice
 (* go: alicebob.go:26:6 *)
 Definition testAliceBobⁱᵐᵖˡ : val :=
   λ: "servAddr" "adtrAddr",
-    exception_do (let: "err" := (mem.alloc (type.zero_val #ktcore.Blame)) in
-    let: "evid" := (mem.alloc (type.zero_val #ptrT)) in
+    exception_do (let: "evid" := (mem.alloc (type.zero_val #ptrT)) in
+    let: "err" := (mem.alloc (type.zero_val #ktcore.Blame)) in
     let: "adtrAddr" := (mem.alloc "adtrAddr") in
     let: "servAddr" := (mem.alloc "servAddr") in
     let: "servSigPk" := (mem.alloc (type.zero_val #cryptoffi.SigPublicKey)) in
@@ -67,7 +67,7 @@ Definition testAliceBobⁱᵐᵖˡ : val :=
     do:  ("adtrPk" <-[#cryptoffi.SigPublicKey] "$r1");;;
     do:  ("err" <-[#ktcore.Blame] "$r2");;;
     (if: (![#ktcore.Blame] "err") ≠ ktcore.BlameNone
-    then return: (![#ptrT] "evid", ![#ktcore.Blame] "err")
+    then return: (![#ktcore.Blame] "err", ![#ptrT] "evid")
     else do:  #());;;
     let: "adtrRpc" := (mem.alloc (type.zero_val #ptrT)) in
     let: "$r0" := (let: "$a0" := (![#ptrT] "adtr") in
@@ -87,7 +87,7 @@ Definition testAliceBobⁱᵐᵖˡ : val :=
     do:  ("alice" <-[#ptrT] "$r0");;;
     do:  ("err" <-[#ktcore.Blame] "$r1");;;
     (if: (![#ktcore.Blame] "err") ≠ ktcore.BlameNone
-    then return: (![#ptrT] "evid", ![#ktcore.Blame] "err")
+    then return: (![#ktcore.Blame] "err", ![#ptrT] "evid")
     else do:  #());;;
     let: "bob" := (mem.alloc (type.zero_val #ptrT)) in
     let: ("$ret0", "$ret1") := (let: "$a0" := bobUid in
@@ -99,27 +99,27 @@ Definition testAliceBobⁱᵐᵖˡ : val :=
     do:  ("bob" <-[#ptrT] "$r0");;;
     do:  ("err" <-[#ktcore.Blame] "$r1");;;
     (if: (![#ktcore.Blame] "err") ≠ ktcore.BlameNone
-    then return: (![#ptrT] "evid", ![#ktcore.Blame] "err")
+    then return: (![#ktcore.Blame] "err", ![#ptrT] "evid")
     else do:  #());;;
     (let: ("$ret0", "$ret1") := (let: "$a0" := (![#uint64T] "adtrAddr") in
     let: "$a1" := (![#cryptoffi.SigPublicKey] "adtrPk") in
     (method_call #(ptrT.id client.Client.id) #"Audit"%go (![#ptrT] "alice")) "$a0" "$a1") in
     let: "$r0" := "$ret0" in
     let: "$r1" := "$ret1" in
-    do:  ("evid" <-[#ptrT] "$r0");;;
-    do:  ("err" <-[#ktcore.Blame] "$r1");;;
+    do:  ("err" <-[#ktcore.Blame] "$r0");;;
+    do:  ("evid" <-[#ptrT] "$r1");;;
     (if: (![#ktcore.Blame] "err") ≠ ktcore.BlameNone
-    then return: (![#ptrT] "evid", ![#ktcore.Blame] "err")
+    then return: (![#ktcore.Blame] "err", ![#ptrT] "evid")
     else do:  #()));;;
     (let: ("$ret0", "$ret1") := (let: "$a0" := (![#uint64T] "adtrAddr") in
     let: "$a1" := (![#cryptoffi.SigPublicKey] "adtrPk") in
     (method_call #(ptrT.id client.Client.id) #"Audit"%go (![#ptrT] "bob")) "$a0" "$a1") in
     let: "$r0" := "$ret0" in
     let: "$r1" := "$ret1" in
-    do:  ("evid" <-[#ptrT] "$r0");;;
-    do:  ("err" <-[#ktcore.Blame] "$r1");;;
+    do:  ("err" <-[#ktcore.Blame] "$r0");;;
+    do:  ("evid" <-[#ptrT] "$r1");;;
     (if: (![#ktcore.Blame] "err") ≠ ktcore.BlameNone
-    then return: (![#ptrT] "evid", ![#ktcore.Blame] "err")
+    then return: (![#ktcore.Blame] "err", ![#ptrT] "evid")
     else do:  #()));;;
     let: "aliceHist" := (mem.alloc (type.zero_val #sliceT)) in
     let: "aliceErr" := (mem.alloc (type.zero_val #ktcore.Blame)) in
@@ -177,38 +177,38 @@ Definition testAliceBobⁱᵐᵖˡ : val :=
     then
       let: "$r0" := (![#ktcore.Blame] "aliceErr") in
       do:  ("err" <-[#ktcore.Blame] "$r0");;;
-      return: (![#ptrT] "evid", ![#ktcore.Blame] "err")
+      return: (![#ktcore.Blame] "err", ![#ptrT] "evid")
     else do:  #());;;
     (if: (![#ktcore.Blame] "bobErr") ≠ ktcore.BlameNone
     then
       let: "$r0" := (![#ktcore.Blame] "bobErr") in
       do:  ("err" <-[#ktcore.Blame] "$r0");;;
-      return: (![#ptrT] "evid", ![#ktcore.Blame] "err")
+      return: (![#ktcore.Blame] "err", ![#ptrT] "evid")
     else do:  #());;;
     (let: "$r0" := ((method_call #(ptrT.id auditor.Auditor.id) #"Update"%go (![#ptrT] "adtr")) #()) in
     do:  ("err" <-[#ktcore.Blame] "$r0");;;
     (if: (![#ktcore.Blame] "err") ≠ ktcore.BlameNone
-    then return: (![#ptrT] "evid", ![#ktcore.Blame] "err")
+    then return: (![#ktcore.Blame] "err", ![#ptrT] "evid")
     else do:  #()));;;
     (let: ("$ret0", "$ret1") := (let: "$a0" := (![#uint64T] "adtrAddr") in
     let: "$a1" := (![#cryptoffi.SigPublicKey] "adtrPk") in
     (method_call #(ptrT.id client.Client.id) #"Audit"%go (![#ptrT] "alice")) "$a0" "$a1") in
     let: "$r0" := "$ret0" in
     let: "$r1" := "$ret1" in
-    do:  ("evid" <-[#ptrT] "$r0");;;
-    do:  ("err" <-[#ktcore.Blame] "$r1");;;
+    do:  ("err" <-[#ktcore.Blame] "$r0");;;
+    do:  ("evid" <-[#ptrT] "$r1");;;
     (if: (![#ktcore.Blame] "err") ≠ ktcore.BlameNone
-    then return: (![#ptrT] "evid", ![#ktcore.Blame] "err")
+    then return: (![#ktcore.Blame] "err", ![#ptrT] "evid")
     else do:  #()));;;
     (let: ("$ret0", "$ret1") := (let: "$a0" := (![#uint64T] "adtrAddr") in
     let: "$a1" := (![#cryptoffi.SigPublicKey] "adtrPk") in
     (method_call #(ptrT.id client.Client.id) #"Audit"%go (![#ptrT] "bob")) "$a0" "$a1") in
     let: "$r0" := "$ret0" in
     let: "$r1" := "$ret1" in
-    do:  ("evid" <-[#ptrT] "$r0");;;
-    do:  ("err" <-[#ktcore.Blame] "$r1");;;
+    do:  ("err" <-[#ktcore.Blame] "$r0");;;
+    do:  ("evid" <-[#ptrT] "$r1");;;
     (if: (![#ktcore.Blame] "err") ≠ ktcore.BlameNone
-    then return: (![#ptrT] "evid", ![#ktcore.Blame] "err")
+    then return: (![#ktcore.Blame] "err", ![#ptrT] "evid")
     else do:  #()));;;
     do:  (let: "$a0" := ((![#uint64T] "bobEp") < (s_to_w64 (let: "$a0" := (![#sliceT] "aliceHist") in
     slice.len "$a0"))) in
@@ -222,9 +222,9 @@ Definition testAliceBobⁱᵐᵖˡ : val :=
     then
       let: "$r0" := ktcore.BlameAdtrSig in
       do:  ("err" <-[#ktcore.Blame] "$r0");;;
-      return: (![#ptrT] "evid", ![#ktcore.Blame] "err")
+      return: (![#ktcore.Blame] "err", ![#ptrT] "evid")
     else do:  #());;;
-    return: (![#ptrT] "evid", ![#ktcore.Blame] "err")).
+    return: (![#ktcore.Blame] "err", ![#ptrT] "evid")).
 
 Definition histEntry : go_type := structT [
   "isReg" :: boolT;

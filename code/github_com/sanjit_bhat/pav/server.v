@@ -1135,7 +1135,7 @@ Definition history : go_type := structT [
 (* Start bootstraps a party with knowledge of the last hash
    in the hashchain and vrf.
 
-   go: server.go:56:18 *)
+   go: server.go:57:18 *)
 Definition Server__Startⁱᵐᵖˡ : val :=
   λ: "s" <>,
     with_defer: (let: "vrf" := (mem.alloc (type.zero_val #ptrT)) in
@@ -1196,7 +1196,7 @@ Definition Work : go_type := structT [
 
 (* Put queues pk (at the specified version) for insertion.
 
-   go: server.go:69:18 *)
+   go: server.go:70:18 *)
 Definition Server__Putⁱᵐᵖˡ : val :=
   λ: "s" "uid" "pk" "ver",
     exception_do (let: "s" := (mem.alloc "s") in
@@ -1219,7 +1219,7 @@ Definition Server__Putⁱᵐᵖˡ : val :=
 (* History gives key history for uid, excluding first prevVerLen versions.
    the caller already saw prevEpoch.
 
-   go: server.go:75:18 *)
+   go: server.go:76:18 *)
 Definition Server__Historyⁱᵐᵖˡ : val :=
   λ: "s" "uid" "prevEpoch" "prevVerLen",
     with_defer: (let: "err" := (mem.alloc (type.zero_val #boolT)) in
@@ -1276,7 +1276,7 @@ Definition Server__Historyⁱᵐᵖˡ : val :=
 
 (* Audit errors if args out of bounds.
 
-   go: server.go:97:18 *)
+   go: server.go:98:18 *)
 Definition Server__Auditⁱᵐᵖˡ : val :=
   λ: "s" "prevEpoch",
     with_defer: (let: "err" := (mem.alloc (type.zero_val #boolT)) in
@@ -1316,7 +1316,7 @@ Definition mapEntry : go_type := structT [
 
 Definition getWork : go_string := "github.com/sanjit-bhat/pav/server.getWork"%go.
 
-(* go: server.go:121:18 *)
+(* go: server.go:122:18 *)
 Definition Server__workerⁱᵐᵖˡ : val :=
   λ: "s" <>,
     exception_do (let: "s" := (mem.alloc "s") in
@@ -1333,7 +1333,7 @@ Definition Server__workerⁱᵐᵖˡ : val :=
       (method_call #(ptrT.id Server.id) #"doWork"%go (![#ptrT] "s")) "$a0"));;;
     return: #()).
 
-(* go: server.go:131:6 *)
+(* go: server.go:132:6 *)
 Definition getWorkⁱᵐᵖˡ : val :=
   λ: "workQ",
     exception_do (let: "work" := (mem.alloc (type.zero_val #sliceT)) in
@@ -1368,7 +1368,7 @@ Definition getWorkⁱᵐᵖˡ : val :=
          )]));;;
     return: (![#sliceT] "work")).
 
-(* go: server.go:149:18 *)
+(* go: server.go:150:18 *)
 Definition Server__doWorkⁱᵐᵖˡ : val :=
   λ: "s" "work",
     exception_do (let: "s" := (mem.alloc "s") in
@@ -1388,7 +1388,7 @@ Definition Server__doWorkⁱᵐᵖˡ : val :=
 
 Definition New : go_string := "github.com/sanjit-bhat/pav/server.New"%go.
 
-(* go: server.go:161:6 *)
+(* go: server.go:162:6 *)
 Definition Newⁱᵐᵖˡ : val :=
   λ: <>,
     exception_do (let: "mu" := (mem.alloc (type.zero_val #ptrT)) in
@@ -1494,7 +1494,7 @@ Definition Newⁱᵐᵖˡ : val :=
     do:  (Fork ("$go" #()));;;
     return: (![#ptrT] "s", ![#cryptoffi.SigPublicKey] "sigPk")).
 
-(* go: server.go:186:18 *)
+(* go: server.go:187:18 *)
 Definition Server__checkWorkⁱᵐᵖˡ : val :=
   λ: "s" "work",
     exception_do (let: "s" := (mem.alloc "s") in
@@ -1536,7 +1536,7 @@ Definition Server__checkWorkⁱᵐᵖˡ : val :=
       do:  (map.insert (![type.mapT #uint64T #boolT] "uidSet") (![#uint64T] "uid") "$r0")));;;
     return: #()).
 
-(* go: server.go:206:18 *)
+(* go: server.go:207:18 *)
 Definition Server__makeEntriesⁱᵐᵖˡ : val :=
   λ: "s" "work",
     exception_do (let: "ents" := (mem.alloc (type.zero_val #sliceT)) in
@@ -1580,7 +1580,7 @@ Definition Server__makeEntriesⁱᵐᵖˡ : val :=
     do:  ((method_call #(ptrT.id sync.WaitGroup.id) #"Wait"%go (![#ptrT] "wg")) #());;;
     return: (![#sliceT] "ents")).
 
-(* go: server.go:226:18 *)
+(* go: server.go:227:18 *)
 Definition Server__makeEntryⁱᵐᵖˡ : val :=
   λ: "s" "in" "out",
     exception_do (let: "s" := (mem.alloc "s") in
@@ -1619,7 +1619,7 @@ Definition Server__makeEntryⁱᵐᵖˡ : val :=
     do:  ((struct.field_ref #mapEntry #"val"%go (![#ptrT] "out")) <-[#sliceT] "$r0");;;
     return: #()).
 
-(* go: server.go:237:18 *)
+(* go: server.go:238:18 *)
 Definition Server__addEntriesⁱᵐᵖˡ : val :=
   λ: "s" "work" "ents",
     exception_do (let: "s" := (mem.alloc "s") in
@@ -1702,7 +1702,7 @@ Definition Server__addEntriesⁱᵐᵖˡ : val :=
 
 (* getHist returns a history of membership proofs for all post-prefix versions.
 
-   go: server.go:263:18 *)
+   go: server.go:264:18 *)
 Definition Server__getHistⁱᵐᵖˡ : val :=
   λ: "s" "uid" "prefixLen",
     exception_do (let: "hist" := (mem.alloc (type.zero_val #sliceT)) in
@@ -1774,7 +1774,7 @@ Definition Server__getHistⁱᵐᵖˡ : val :=
 
 (* getBound returns a non-membership proof for the boundary version.
 
-   go: server.go:279:18 *)
+   go: server.go:280:18 *)
 Definition Server__getBoundⁱᵐᵖˡ : val :=
   λ: "s" "uid" "numVers",
     exception_do (let: "bound" := (mem.alloc (type.zero_val #ptrT)) in
