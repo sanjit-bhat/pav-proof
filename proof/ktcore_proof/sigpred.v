@@ -29,8 +29,7 @@ Definition sigpred_vrf γ enc : iProp Σ :=
 
   "#Hshot" ∷ ghost_var γ (□) vrfPk.
 
-Definition sigpred_links_inv links : iProp Σ :=
-  ∃ digs cut maps,
+Definition sigpred_links_inv links digs cut maps : iProp Σ :=
   (* [offset] is the number of digs prior to links starting. *)
   let offset := (length digs - length links)%nat in
   "#Hlinks" ∷ ([∗ list] idx ↦ link ∈ links,
@@ -48,7 +47,7 @@ Definition sigpred_links_inv links : iProp Σ :=
 
 Definition sigpred_links γstartEp γlinks enc : iProp Σ :=
   (* [links] are all audited. they start from [startEp]. *)
-  ∃ ep link startEp links,
+  ∃ ep link startEp links digs cut maps,
   "%Henc" ∷ ⌜enc = ktcore.LinkSig.pure_enc (ktcore.LinkSig.mk' (W8 ktcore.LinkSigTag) ep link)⌝ ∗
   "%Hvalid" ∷ ⌜safemarshal.Slice1D.valid link⌝ ∗
 
@@ -56,10 +55,11 @@ Definition sigpred_links γstartEp γlinks enc : iProp Σ :=
   "#Hshot" ∷ ghost_var γstartEp (□) startEp ∗
   "#Hlb" ∷ mono_list_lb_own γlinks links ∗
   "%Hlook" ∷ ⌜links !! (uint.nat ep - uint.nat startEp)%nat = Some link⌝ ∗
-  "#Hinv" ∷ sigpred_links_inv links.
+  "#Hinv" ∷ sigpred_links_inv links digs cut maps.
 
 Definition sigpred γ enc : iProp Σ :=
-  sigpred_vrf γ.(sigpred_cfg.vrf) enc ∨ sigpred_links γ.(sigpred_cfg.startEp) γ.(sigpred_cfg.links) enc.
+  sigpred_vrf γ.(sigpred_cfg.vrf) enc ∨
+  sigpred_links γ.(sigpred_cfg.startEp) γ.(sigpred_cfg.links) enc.
 
 #[global] Instance sigpred_pers γ e : Persistent (sigpred γ e).
 Proof. apply _. Qed.

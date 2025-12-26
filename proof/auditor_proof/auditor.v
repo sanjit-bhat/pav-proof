@@ -15,16 +15,26 @@ From New.proof.github_com.sanjit_bhat.pav Require Import prelude.
 Module auditor.
 Import base.auditor serde.auditor.
 
+Module state.
+Record t :=
+  mk {
+    links: list $ list w8;
+  }.
+End state.
+
+(* cfg is the global info we know about this party, if good. *)
 Module cfg.
 Record t :=
   mk {
     serv_sig_pk: list w8;
     adtr_sig_pk: list w8;
     sigpredγ: ktcore.sigpred_cfg.t;
+    vrf_pk: list w8;
+    start_ep: w64;
   }.
 End cfg.
 
-Module history.
+Module epoch.
 Record t :=
   mk' {
     link: list w8;
@@ -35,7 +45,7 @@ Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}
 
 Definition own ptr obj ep γ : iProp Σ :=
   ∃ sl_link sl_servSig servSig sl_adtrSig adtrSig,
-  "#Hstr_history" ∷ ptr ↦□ (auditor.history.mk sl_link sl_servSig sl_adtrSig) ∗
+  "#Hstr_epoch" ∷ ptr ↦□ (auditor.epoch.mk sl_link sl_servSig sl_adtrSig) ∗
   "#Hsl_link" ∷ sl_link ↦*□ obj.(link) ∗
   "#Hsl_servSig" ∷ sl_servSig ↦*□ servSig ∗
   "#His_servSig" ∷ ktcore.wish_LinkSig γ.(cfg.serv_sig_pk) ep obj.(link) servSig ∗
@@ -43,40 +53,69 @@ Definition own ptr obj ep γ : iProp Σ :=
   "#His_adtrSig" ∷ ktcore.wish_LinkSig γ.(cfg.adtr_sig_pk) ep obj.(link) adtrSig.
 
 End proof.
-End history.
+End epoch.
 
-Module serv.
+Module history.
 Record t :=
   mk' {
-    vrfPk: list w8;
-
-    good: option server.cfg.t;
+    digs: list $ list w8;
+    cut: option $ list w8;
   }.
 
 Section proof.
 Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
 Context `{!pavG Σ}.
 
-Definition own ptr obj γ : iProp Σ :=
+Definition own ptr obj γ σ q : iProp Σ :=
+  ∃ sl_lastDig lastDig sl_epochs sl0_epochs,
+  "#Hstr_history" ∷ ptr ↦{#q} (auditor.history.mk sl_lastDig γ.(cfg.start_ep) sl_epochs) ∗
+  "#Hsl_lastDig" ∷ sl_lastDig ↦*□ lastDig ∗
+  "%Heq_lastDig" ∷ ⌜last obj.(digs) = Some lastDig⌝ ∗
+  "Hsl_epochs" ∷ sl_epochs ↦*{#q} sl0_epochs ∗
+  "Hcap_hist" ∷ own_slice_cap loc sl_epochs (DfracOwn q) ∗
+  "#Hepochs" ∷ ([∗ list] idx ↦ p;o ∈ sl0_epochs;σ.(state.links),
+    epoch.own p (epoch.mk' o) (uint.nat γ.(cfg.start_ep) + idx) γ).
+
+Definition own_gs obj γ σ q : iProp Σ :=
+  ∃ maps,
+  "#Hgs_startEp" ∷ ghost_var γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.startEp) (□) γ.(cfg.start_ep) ∗
+  (* 1/2 own in fupd inv. *)
+  "Hgs_links" ∷ mono_list_auth_own γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.links) (q/2) σ.(state.links) ∗
+  "#Hinv_sigpred" ∷ ktcore.sigpred_links_inv σ.(state.links) obj.(digs) obj.(cut) maps.
+
+Definition align_serv obj γ σ servγ : iProp Σ :=
+  ∃ hist,
+  "#His_hist" ∷ mono_list_lb_own servγ.(server.cfg.histγ) hist ∗
+  "%Heq_ep" ∷ ⌜length hist = (uint.nat γ.(cfg.start_ep) + length σ.(state.links))%nat⌝ ∗
+  "%Heq_digs" ∷ ⌜obj.(digs) = hist.*1⌝ ∗
+  "%Heq_cut" ∷ ⌜obj.(cut) = None⌝.
+
+End proof.
+End history.
+
+Module serv.
+Section proof.
+Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
+Context `{!pavG Σ}.
+
+Definition own ptr γ good : iProp Σ :=
   ∃ ptr_cli sl_sigPk sl_vrfPk sl_servVrfSig servVrfSig sl_adtrVrfSig adtrVrfSig,
   "#Hstr_serv" ∷ ptr ↦□ (auditor.serv.mk ptr_cli sl_sigPk sl_vrfPk sl_servVrfSig sl_adtrVrfSig) ∗
-  "#His_rpc" ∷ server.is_Server_rpc ptr_cli obj.(good) ∗
+  "#His_rpc" ∷ server.is_Server_rpc ptr_cli good ∗
   "#Hsl_sigPk" ∷ sl_sigPk ↦*□ γ.(cfg.serv_sig_pk) ∗
-  "#Hsl_vrfPk" ∷ sl_vrfPk ↦*□ obj.(vrfPk) ∗
+  "#Hsl_vrfPk" ∷ sl_vrfPk ↦*□ γ.(cfg.vrf_pk) ∗
   "#Hsl_servVrfSig" ∷ sl_servVrfSig ↦*□ servVrfSig ∗
-  "#His_servVrfSig" ∷ ktcore.wish_VrfSig γ.(cfg.serv_sig_pk) obj.(vrfPk) servVrfSig ∗
+  "#His_servVrfSig" ∷ ktcore.wish_VrfSig γ.(cfg.serv_sig_pk) γ.(cfg.vrf_pk) servVrfSig ∗
   "#Hsl_adtrVrfSig" ∷ sl_adtrVrfSig ↦*□ adtrVrfSig ∗
-  "#His_adtrVrfSig" ∷ ktcore.wish_VrfSig γ.(cfg.adtr_sig_pk) obj.(vrfPk) adtrVrfSig ∗
+  "#His_adtrVrfSig" ∷ ktcore.wish_VrfSig γ.(cfg.adtr_sig_pk) γ.(cfg.vrf_pk) adtrVrfSig.
 
-  "#His_sigPk" ∷ match obj.(good) with None => True | Some servγ =>
-    cryptoffi.is_sig_pk γ.(cfg.serv_sig_pk)
-      (ktcore.sigpred_pred servγ.(server.cfg.sigpredγ)) end ∗
-  (* trusted. *)
-  "%Heq_sig_pk" ∷ ⌜match obj.(good) with None => True | Some servγ =>
-    γ.(cfg.serv_sig_pk) = servγ.(server.cfg.sig_pk) end⌝ ∗
+Definition align_serv γ servγ : iProp Σ :=
+  (* trusted Auditor.New assumption. *)
+  "%Heq_sig_pk" ∷ ⌜γ.(cfg.serv_sig_pk) = servγ.(server.cfg.sig_pk)⌝ ∗
+  "#His_sig_pk" ∷ cryptoffi.is_sig_pk γ.(cfg.serv_sig_pk)
+    (ktcore.sigpred servγ.(server.cfg.sigpredγ)) ∗
   (* from signed vrf_pk. *)
-  "%Heq_vrf_pk" ∷ ⌜match obj.(good) with None => True | Some servγ =>
-    obj.(vrfPk) = servγ.(server.cfg.vrf_pk) end⌝.
+  "%Heq_vrf_pk" ∷ ⌜γ.(cfg.vrf_pk) = servγ.(server.cfg.vrf_pk)⌝.
 
 End proof.
 End serv.
@@ -86,46 +125,29 @@ Section proof.
 Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
 Context `{!pavG Σ}.
 
-(* length hist ≤ length digs ≤ total # eps. *)
-Definition own ptr γ (q : Qp) : iProp Σ :=
-  ∃ (digs : list $ list w8) (cut : option $ list w8) serv
-    ptr_sk sl_lastDig lastDig (startEp : w64) sl_hist (sl0_hist : list loc)
-    ptr_serv (lastEp : w64),
+Definition own ptr γ σ q : iProp Σ :=
+  ∃ ptr_sk ptr_hist hist ptr_serv serv_good,
   (* separate struct fields bc "mu" contained in lock perm. *)
   "#Hfld_sk" ∷ ptr ↦s[auditor.Auditor::"sk"]□ ptr_sk ∗
-  "Hfld_lastDig" ∷ ptr ↦s[auditor.Auditor::"lastDig"]{# q} sl_lastDig ∗
-  "#Hfld_startEp" ∷ ptr ↦s[auditor.Auditor::"startEp"]□ startEp ∗
-  "Hfld_hist" ∷ ptr ↦s[auditor.Auditor::"hist"]{# q} sl_hist ∗
+  "Hfld_hist" ∷ ptr ↦s[auditor.Auditor::"hist"]{#q} ptr_hist ∗
   "#Hfld_serv" ∷ ptr ↦s[auditor.Auditor::"serv"]□ ptr_serv ∗
 
   "#Hown_sk" ∷ cryptoffi.own_sig_sk ptr_sk γ.(cfg.adtr_sig_pk)
-    (ktcore.sigpred_pred γ.(cfg.sigpredγ)) ∗
-  "Hsl_lastDig" ∷ sl_lastDig ↦*{#q} lastDig ∗
-  "%Heq_lastDig" ∷ ⌜last digs = Some lastDig⌝ ∗
-  "Hsl_hist" ∷ sl_hist ↦*{#q} sl0_hist ∗
-  "Hcap_hist" ∷ own_slice_cap loc sl_hist (DfracOwn q) ∗
-  "#Hown_serv" ∷ serv.own ptr_serv serv γ ∗
+    (ktcore.sigpred γ.(cfg.sigpredγ)) ∗
 
-  (* allows proving Get spec. *)
-  "#Hhist" ∷ ([∗ list] idx ↦ ptr_hist ∈ sl0_hist,
-    ∃ link,
-    let num_digs := (length digs - length sl0_hist + idx + 1)%nat in
-    "#His_link" ∷ hashchain.is_chain (take num_digs digs) cut link num_digs ∗
-    "#Hown_hist" ∷ history.own ptr_hist (history.mk' link) (uint.nat startEp + idx) γ) ∗
-  "%Hlt_hist" ∷ ⌜length sl0_hist ≤ length digs⌝ ∗
-  "%Hnoof_lastEp" ∷ ⌜uint.Z startEp + length sl0_hist - 1 = uint.Z lastEp⌝ ∗
+  "Hown_hist" ∷ history.own ptr_hist hist γ σ q ∗
+  "Hown_gs_hist" ∷ history.own_gs hist γ σ q ∗
+  "#Halign_hist" ∷ match serv_good with None => True | Some servγ =>
+    history.align_serv hist γ σ servγ end ∗
 
-  (* allows proving Update BlameSpec. *)
-  "#Hgood" ∷ match serv.(serv.good) with None => True | Some servγ =>
-    ∃ (hist : list (list w8 * server.keys_ty)),
-    "#Hlb_hist" ∷ mono_list_lb_own servγ.(server.cfg.histγ) hist ∗
-    "%Heq_digs" ∷ ⌜digs = hist.*1⌝ ∗
-    "%Heq_cut" ∷ ⌜cut = None⌝ end.
+  "#Hown_serv" ∷ serv.own ptr_serv γ serv_good ∗
+  "#Halign_serv" ∷ match serv_good with None => True | Some servγ =>
+    serv.align_serv γ servγ end.
 
 Definition lock_perm ptr γ : iProp Σ :=
-  ∃ ptr_mu,
+  ∃ ptr_mu σ,
   "#Hfld_mu" ∷ ptr ↦s[auditor.Auditor::"mu"]□ ptr_mu ∗
-  "Hperm" ∷ own_RWMutex ptr_mu (own ptr γ).
+  "Hperm" ∷ own_RWMutex ptr_mu (own ptr γ σ).
 
 End proof.
 End Auditor.
