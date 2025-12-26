@@ -1,31 +1,35 @@
 From New.proof Require Import proof_prelude.
 From New.proof.github_com.sanjit_bhat.pav Require Import prelude.
 From New.proof.github_com.sanjit_bhat.pav Require Import
-  hashchain ktcore merkle safemarshal.
+  hashchain merkle safemarshal.
 
-Module sigpred.
+From New.proof.github_com.sanjit_bhat.pav.ktcore_proof Require Import
+  ktcore serde.
 
-Module cfg.
+Module ktcore.
+Import ktcore.ktcore serde.ktcore.
+
+Module sigpred_cfg.
 Record t :=
   mk {
     vrf: gname;
     startEp: gname;
     links: gname;
   }.
-End cfg.
+End sigpred_cfg.
 
 Section proof.
 Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
 Context `{!pavG Σ}.
 
-Definition vrf_pred γ enc : iProp Σ :=
+Definition sigpred_vrf γ enc : iProp Σ :=
   ∃ vrfPk,
   "%Henc" ∷ ⌜enc = ktcore.VrfSig.pure_enc (ktcore.VrfSig.mk' (W8 ktcore.VrfSigTag) vrfPk)⌝ ∗
   "%Hvalid" ∷ ⌜safemarshal.Slice1D.valid vrfPk⌝ ∗
 
   "#Hshot" ∷ ghost_var γ (□) vrfPk.
 
-Definition links_inv links : iProp Σ :=
+Definition sigpred_links_inv links : iProp Σ :=
   ∃ digs cut maps,
   (* [offset] is the number of digs prior to links starting. *)
   let offset := (length digs - length links)%nat in
@@ -42,7 +46,7 @@ Definition links_inv links : iProp Σ :=
     maps !! (S i) = Some m1 →
     m0 ⊆ m1⌝.
 
-Definition links_pred γstartEp γlinks enc : iProp Σ :=
+Definition sigpred_links γstartEp γlinks enc : iProp Σ :=
   (* [links] are all audited. they start from [startEp]. *)
   ∃ ep link startEp links,
   "%Henc" ∷ ⌜enc = ktcore.LinkSig.pure_enc (ktcore.LinkSig.mk' (W8 ktcore.LinkSigTag) ep link)⌝ ∗
@@ -52,13 +56,13 @@ Definition links_pred γstartEp γlinks enc : iProp Σ :=
   "#Hshot" ∷ ghost_var γstartEp (□) startEp ∗
   "#Hlb" ∷ mono_list_lb_own γlinks links ∗
   "%Hlook" ∷ ⌜links !! (uint.nat ep - uint.nat startEp)%nat = Some link⌝ ∗
-  "#Hinv" ∷ links_inv links.
+  "#Hinv" ∷ sigpred_links_inv links.
 
-Definition pred γ enc : iProp Σ :=
-  vrf_pred γ.(cfg.vrf) enc ∨ links_pred γ.(cfg.startEp) γ.(cfg.links) enc.
+Definition sigpred γ enc : iProp Σ :=
+  sigpred_vrf γ.(sigpred_cfg.vrf) enc ∨ sigpred_links γ.(sigpred_cfg.startEp) γ.(sigpred_cfg.links) enc.
 
-#[global] Instance pred_pers γ e : Persistent (pred γ e).
+#[global] Instance sigpred_pers γ e : Persistent (sigpred γ e).
 Proof. apply _. Qed.
 
 End proof.
-End sigpred.
+End ktcore.

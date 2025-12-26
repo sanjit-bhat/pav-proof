@@ -3,7 +3,7 @@ From New.generatedproof.github_com.sanjit_bhat.pav Require Import server.
 From New.proof Require Import sync time.
 From New.proof.github_com.goose_lang Require Import std.
 From New.proof.github_com.sanjit_bhat.pav Require Import
-  cryptoffi hashchain ktcore merkle sigpred.
+  cryptoffi hashchain ktcore merkle.
 
 From New.proof.github_com.sanjit_bhat.pav.server_proof Require Import
   serde.
@@ -49,7 +49,7 @@ Record t :=
     (* for now, have sigpred GS be diff from serv.hist GS.
     serv.hist GS talks about keys, whereas auditor (sharing same sigpred),
     doesn't have the plaintext keys. *)
-    sigpredγ: sigpred.cfg.t;
+    sigpredγ: ktcore.sigpred_cfg.t;
   }.
 End cfg.
 

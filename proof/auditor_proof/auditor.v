@@ -3,7 +3,7 @@ From New.generatedproof.github_com.sanjit_bhat.pav Require Import auditor.
 From New.proof Require Import bytes sync.
 From New.proof.github_com.goose_lang Require Import std.
 From New.proof.github_com.sanjit_bhat.pav Require Import
-  advrpc cryptoffi hashchain ktcore merkle server sigpred.
+  advrpc cryptoffi hashchain ktcore merkle server.
 
 From New.proof.github_com.sanjit_bhat.pav.auditor_proof Require Import
   base serde.
@@ -20,7 +20,7 @@ Record t :=
   mk {
     serv_sig_pk: list w8;
     adtr_sig_pk: list w8;
-    sigpredγ: sigpred.cfg.t;
+    sigpredγ: ktcore.sigpred_cfg.t;
   }.
 End cfg.
 
@@ -70,7 +70,7 @@ Definition own ptr obj γ : iProp Σ :=
 
   "#His_sigPk" ∷ match obj.(good) with None => True | Some servγ =>
     cryptoffi.is_sig_pk γ.(cfg.serv_sig_pk)
-      (sigpred.pred servγ.(server.cfg.sigpredγ)) end ∗
+      (ktcore.sigpred_pred servγ.(server.cfg.sigpredγ)) end ∗
   (* trusted. *)
   "%Heq_sig_pk" ∷ ⌜match obj.(good) with None => True | Some servγ =>
     γ.(cfg.serv_sig_pk) = servγ.(server.cfg.sig_pk) end⌝ ∗
@@ -99,7 +99,7 @@ Definition own ptr γ (q : Qp) : iProp Σ :=
   "#Hfld_serv" ∷ ptr ↦s[auditor.Auditor::"serv"]□ ptr_serv ∗
 
   "#Hown_sk" ∷ cryptoffi.own_sig_sk ptr_sk γ.(cfg.adtr_sig_pk)
-    (sigpred.pred γ.(cfg.sigpredγ)) ∗
+    (ktcore.sigpred_pred γ.(cfg.sigpredγ)) ∗
   "Hsl_lastDig" ∷ sl_lastDig ↦*{#q} lastDig ∗
   "%Heq_lastDig" ∷ ⌜last digs = Some lastDig⌝ ∗
   "Hsl_hist" ∷ sl_hist ↦*{#q} sl0_hist ∗

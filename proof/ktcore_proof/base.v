@@ -1,6 +1,7 @@
 From New.generatedproof.github_com.sanjit_bhat.pav Require Import ktcore.
 From New.proof.github_com.sanjit_bhat.pav Require Import prelude.
 
+From New.proof Require Import bytes.
 From New.proof.github_com.sanjit_bhat.pav Require Import
   cryptoffi cryptoutil safemarshal.
 From New.proof.github_com.tchajed Require Import marshal.
@@ -32,6 +33,9 @@ Proof.
   { naive_solver. }
   { iModIntro. iEval simpl_is_pkg_defined in "Hdef". iPkgInit. }
   wp_apply (cryptoffi.wp_initialize' with "[$Hown]") as "(Hown & #?)".
+  { naive_solver. }
+  { iModIntro. iEval simpl_is_pkg_defined in "Hdef". iPkgInit. }
+  wp_apply (bytes.wp_initialize' with "[$Hown]") as "(Hown & #?)".
   { naive_solver. }
   { iModIntro. iEval simpl_is_pkg_defined in "Hdef". iPkgInit. }
   wp_call. iEval (rewrite is_pkg_init_unfold /=). by iFrame "∗#".

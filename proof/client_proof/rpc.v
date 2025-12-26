@@ -2,7 +2,7 @@ From New.generatedproof.github_com.sanjit_bhat.pav Require Import client server.
 From New.proof.github_com.sanjit_bhat.pav Require Import prelude.
 
 From New.proof.github_com.sanjit_bhat.pav Require Import
-  advrpc auditor cryptoffi hashchain ktcore merkle sigpred.
+  advrpc auditor cryptoffi hashchain ktcore merkle.
 
 From New.proof.github_com.sanjit_bhat.pav.server_proof Require Import
   server rpc.
