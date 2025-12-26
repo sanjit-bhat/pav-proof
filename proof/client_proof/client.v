@@ -4,7 +4,7 @@ From New.proof.github_com.sanjit_bhat.pav Require Import prelude.
 From New.proof Require Import bytes.
 From New.proof.github_com.goose_lang Require Import std.
 From New.proof.github_com.sanjit_bhat.pav Require Import
-  advrpc auditor cryptoffi hashchain ktcore merkle server sigpred.
+  advrpc auditor cryptoffi hashchain ktcore merkle server.
 
 From New.proof.github_com.sanjit_bhat.pav.client_proof Require Import
   rpc.
