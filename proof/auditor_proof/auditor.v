@@ -31,6 +31,7 @@ Record t :=
     sigpredγ: ktcore.sigpred_cfg.t;
     vrf_pk: list w8;
     start_ep: w64;
+    serv_good: option $ server.cfg.t;
   }.
 End cfg.
 
@@ -126,7 +127,7 @@ Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}
 Context `{!pavG Σ}.
 
 Definition own ptr γ σ q : iProp Σ :=
-  ∃ ptr_sk ptr_hist hist ptr_serv serv_good,
+  ∃ ptr_sk ptr_hist hist ptr_serv,
   (* separate struct fields bc "mu" contained in lock perm. *)
   "#Hfld_sk" ∷ ptr ↦s[auditor.Auditor::"sk"]□ ptr_sk ∗
   "Hfld_hist" ∷ ptr ↦s[auditor.Auditor::"hist"]{#q} ptr_hist ∗
@@ -137,11 +138,11 @@ Definition own ptr γ σ q : iProp Σ :=
 
   "Hown_hist" ∷ history.own ptr_hist hist γ σ q ∗
   "Hown_gs_hist" ∷ history.own_gs hist γ σ q ∗
-  "#Halign_hist" ∷ match serv_good with None => True | Some servγ =>
+  "#Halign_hist" ∷ match γ.(cfg.serv_good) with None => True | Some servγ =>
     history.align_serv hist γ σ servγ end ∗
 
-  "#Hown_serv" ∷ serv.own ptr_serv γ serv_good ∗
-  "#Halign_serv" ∷ match serv_good with None => True | Some servγ =>
+  "#Hown_serv" ∷ serv.own ptr_serv γ γ.(cfg.serv_good) ∗
+  "#Halign_serv" ∷ match γ.(cfg.serv_good) with None => True | Some servγ =>
     serv.align_serv γ servγ end.
 
 Definition lock_perm ptr γ : iProp Σ :=
@@ -400,24 +401,39 @@ Definition wish_SignedVrf servPk adtrPk vrf : iProp Σ :=
   "#Hwish_serv_sig" ∷ ktcore.wish_VrfSig servPk
     vrf.(SignedVrf.VrfPk) vrf.(SignedVrf.ServSig).
 
-Lemma wp_Auditor_Get a γ epoch :
+Definition own_Auditor γ σ :=
+  (* other 1/2 in lock inv. *)
+  "Hgs_links" ∷ mono_list_auth_own γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.links) (1/2) σ.(state.links).
+
+Definition is_adtr_inv γ := inv nroot (∃ σ, own_Auditor γ σ).
+
+Lemma wp_Auditor_Get a γ epoch Q :
   {{{
     is_pkg_init auditor ∗
-    "Hlock" ∷ Auditor.lock_perm a γ
+    "Hlock" ∷ Auditor.lock_perm a γ ∗
+    "#Hfupd" ∷ □ (|={⊤,∅}=> ∃ σ, own_Auditor γ σ ∗
+      (own_Auditor γ σ ={∅,⊤}=∗ Q σ))
   }}}
   a @ (ptrT.id auditor.Auditor.id) @ "Get" #epoch
   {{{
-    ptr_link ptr_vrf err, RET (#ptr_link, #ptr_vrf, #err);
+    ptr_link ptr_vrf err σ, RET (#ptr_link, #ptr_vrf, #err);
     "Hlock" ∷ Auditor.lock_perm a γ ∗
-    (* client doesn't require anything of this err. *)
-    "Herr" ∷ match err with true => True | false =>
-      ∃ link vrf,
-      "#Hown_link" ∷ SignedLink.own ptr_link link (□) ∗
-      "#Hown_vrf" ∷ SignedVrf.own ptr_vrf vrf (□) ∗
-      "#Hwish_link" ∷ wish_SignedLink γ.(cfg.serv_sig_pk) γ.(cfg.adtr_sig_pk) epoch link ∗
-      "#Hwish_vrf" ∷ wish_SignedVrf γ.(cfg.serv_sig_pk) γ.(cfg.adtr_sig_pk) vrf end
+    "HQ" ∷ Q σ ∗
+    "#Herr" ∷
+      match err with
+      | true => ⌜uint.nat epoch < uint.nat γ.(cfg.start_ep) ∨
+        uint.nat epoch ≥ (uint.nat γ.(cfg.start_ep) + length σ.(state.links))%nat⌝
+      | false =>
+        ∃ link vrf,
+        "#Hown_link" ∷ SignedLink.own ptr_link link (□) ∗
+        "#Hown_vrf" ∷ SignedVrf.own ptr_vrf vrf (□) ∗
+        "#Hwish_link" ∷ wish_SignedLink γ.(cfg.serv_sig_pk) γ.(cfg.adtr_sig_pk) epoch link ∗
+        "#Hwish_vrf" ∷ wish_SignedVrf γ.(cfg.serv_sig_pk) γ.(cfg.adtr_sig_pk) vrf ∗
+        "%Hlook_link" ∷ ⌜σ.(state.links) !! uint.nat epoch = Some link.(SignedLink.Link)⌝ ∗
+        "%Heq_vrf" ∷ ⌜vrf.(SignedVrf.VrfPk) = γ.(cfg.vrf_pk)⌝
+      end
   }}}.
-Proof.
+Proof. Admitted. (*
   wp_start as "@".
   iNamed "Hlock".
   wp_apply wp_with_defer as "* Hdefer".
@@ -451,6 +467,29 @@ Proof.
   replace (W64 (uint.nat _ + sint.nat _)) with epoch by word.
   iFrame "#".
 Qed.
+*)
+
+Lemma wp_Auditor_Update a γ Q :
+  {{{
+    is_pkg_init auditor ∗
+    "Hlock" ∷ Auditor.lock_perm a γ ∗
+    (* pers fupd so that Auditor can add mult links,
+    or even run Update as a background thread. *)
+    "#Hfupd" ∷ □ (|={⊤,∅}=> ∃ σ, own_Auditor γ σ ∗
+      (∀ new_link,
+      let σ' := set state.links (.++ [new_link]) σ in
+      own_Auditor γ σ' ={∅,⊤}=∗ Q σ'))
+  }}}
+  a @ (ptrT.id auditor.Auditor.id) @ "Update" #()
+  {{{
+    err σ, RET #(ktcore.blame_to_u64 err);
+    "Hlock" ∷ Auditor.lock_perm a γ ∗
+    "%Hblame" ∷ ⌜ktcore.BlameSpec err
+      {[ktcore.BlameServFull:=option_bool γ.(cfg.serv_good)]}⌝ ∗
+    "Herr" ∷ (if decide (err ≠ ∅) then True else
+      "HQ" ∷ Q σ)
+  }}}.
+Proof. Admitted.
 
 End proof.
 End auditor.

@@ -326,7 +326,8 @@ Lemma wp_Server_Put s γ uid sl_pk pk ver :
     is_pkg_init server ∗
     "#His_serv" ∷ is_Server s γ ∗
     "#Hsl_pk" ∷ sl_pk ↦*□ pk ∗
-    (* caller doesn't need anything from Put. *)
+    (* caller doesn't need anything from Put.
+    and in fact, Put might logically execute *after* Put returns. *)
     "#Hfupd" ∷ □ (|={⊤,∅}=> ∃ σ, own_Server γ σ ∗
       let σ' := set state.pending (pure_put uid pk ver) σ in
       (own_Server γ σ' ={∅,⊤}=∗ True))
