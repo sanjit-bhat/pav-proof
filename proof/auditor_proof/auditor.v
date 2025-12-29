@@ -68,14 +68,17 @@ Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}
 Context `{!pavG Σ}.
 
 Definition own ptr obj γ σ q : iProp Σ :=
-  ∃ sl_lastDig lastDig sl_epochs sl0_epochs,
-  "#Hstr_history" ∷ ptr ↦{#q} (auditor.history.mk sl_lastDig γ.(cfg.start_ep) sl_epochs) ∗
+  ∃ sl_lastDig lastDig sl_epochs sl0_epochs (last_ep : w64),
+  "Hstr_history" ∷ ptr ↦{#q} (auditor.history.mk sl_lastDig γ.(cfg.start_ep) sl_epochs) ∗
   "#Hsl_lastDig" ∷ sl_lastDig ↦*□ lastDig ∗
   "%Heq_lastDig" ∷ ⌜last obj.(digs) = Some lastDig⌝ ∗
   "Hsl_epochs" ∷ sl_epochs ↦*{#q} sl0_epochs ∗
   "Hcap_hist" ∷ own_slice_cap loc sl_epochs (DfracOwn q) ∗
   "#Hepochs" ∷ ([∗ list] idx ↦ p;o ∈ sl0_epochs;σ.(state.links),
-    epoch.own p (epoch.mk' o) (uint.nat γ.(cfg.start_ep) + idx) γ).
+    epoch.own p (epoch.mk' o) (uint.nat γ.(cfg.start_ep) + idx) γ) ∗
+  "%Hsome_links" ∷ ⌜length σ.(state.links) > 0⌝ ∗
+  "%Hinb_ep" ∷ ⌜uint.Z γ.(cfg.start_ep) + length σ.(state.links) - 1 =
+    uint.Z last_ep⌝.
 
 Definition own_gs obj γ σ q : iProp Σ :=
   ∃ maps,
@@ -407,6 +410,19 @@ Definition own_Auditor γ σ :=
 
 Definition is_adtr_inv γ := inv nroot (∃ σ, own_Auditor γ σ).
 
+Lemma unify_adtr_gs obj γ σ σ' q :
+  history.own_gs obj γ σ q -∗
+  own_Auditor γ σ' -∗
+  ⌜σ' = σ⌝.
+Proof.
+  rewrite /own_Auditor.
+  iNamedSuffix 1 "0".
+  iNamedSuffix 1 "1".
+  iDestruct (mono_list_auth_own_agree with "Hgs_links0 Hgs_links1") as %[_ ?].
+  destruct σ, σ'.
+  by simplify_eq/=.
+Qed.
+
 Lemma wp_Auditor_Get a γ epoch Q :
   {{{
     is_pkg_init auditor ∗
@@ -421,53 +437,69 @@ Lemma wp_Auditor_Get a γ epoch Q :
     "HQ" ∷ Q σ ∗
     "#Herr" ∷
       match err with
-      | true => ⌜uint.nat epoch < uint.nat γ.(cfg.start_ep) ∨
-        uint.nat epoch ≥ (uint.nat γ.(cfg.start_ep) + length σ.(state.links))%nat⌝
+      | true => ⌜uint.Z epoch < uint.Z γ.(cfg.start_ep) ∨
+        uint.Z epoch >= uint.Z γ.(cfg.start_ep) + length σ.(state.links)⌝
       | false =>
         ∃ link vrf,
         "#Hown_link" ∷ SignedLink.own ptr_link link (□) ∗
         "#Hown_vrf" ∷ SignedVrf.own ptr_vrf vrf (□) ∗
         "#Hwish_link" ∷ wish_SignedLink γ.(cfg.serv_sig_pk) γ.(cfg.adtr_sig_pk) epoch link ∗
         "#Hwish_vrf" ∷ wish_SignedVrf γ.(cfg.serv_sig_pk) γ.(cfg.adtr_sig_pk) vrf ∗
-        "%Hlook_link" ∷ ⌜σ.(state.links) !! uint.nat epoch = Some link.(SignedLink.Link)⌝ ∗
+        "%Hlook_link" ∷ ⌜σ.(state.links) !!
+          (uint.nat epoch - uint.nat γ.(cfg.start_ep))%nat =
+          Some link.(SignedLink.Link)⌝ ∗
         "%Heq_vrf" ∷ ⌜vrf.(SignedVrf.VrfPk) = γ.(cfg.vrf_pk)⌝
       end
   }}}.
-Proof. Admitted. (*
+Proof.
   wp_start as "@".
   iNamed "Hlock".
   wp_apply wp_with_defer as "* Hdefer".
   simpl. wp_auto.
   wp_apply (wp_RWMutex__RLock with "[$Hperm]") as "[Hlocked H]".
-  iNamed "H". wp_auto.
-  wp_if_destruct.
-  { wp_apply (wp_RWMutex__RUnlock with "[-HΦ]") as "Hlock".
-    { iFrame "∗∗#%". }
-    iApply "HΦ". iFrame "∗#". }
-  wp_if_destruct.
-  { wp_apply (wp_RWMutex__RUnlock with "[-HΦ]") as "Hlock".
-    { iFrame "∗∗#%". }
-    iApply "HΦ". iFrame "∗#". }
+  iNamed "H". iNamed "Hown_hist". wp_auto.
+  iApply ncfupd_wp.
+  iMod "Hfupd" as "(%&Hadtr&Hfupd)".
+  iDestruct (unify_adtr_gs with "Hown_gs_hist Hadtr") as %->.
+  iMod ("Hfupd" with "Hadtr") as "HQ".
+  iModIntro.
 
-  iDestruct (own_slice_len with "Hsl_hist") as %[? ?].
+  iDestruct (own_slice_len with "Hsl_epochs") as %[? ?].
+  iDestruct (big_sepL2_length with "Hepochs") as %?.
+  wp_if_destruct.
+  { wp_apply (wp_RWMutex__RUnlock with "[-HΦ HQ]") as "Hlock".
+    { iFrame "∗∗ Hown_serv #%". }
+    iApply "HΦ".
+    iFrame "∗#".
+    word. }
+  wp_if_destruct.
+  { wp_apply (wp_RWMutex__RUnlock with "[-HΦ HQ]") as "Hlock".
+    { iFrame "∗∗ Hown_serv #%". }
+    iApply "HΦ".
+    iFrame "∗#".
+    word. }
+
+  simpl in *.
   wp_pure; [word|].
-  list_elem sl0_hist (sint.nat (word.sub epoch startEp)) as ptr_epoch.
-  iDestruct (big_sepL_lookup with "Hhist") as "@"; [done|].
-  iNamed "Hown_hist".
+  list_elem σ.(state.links) (sint.nat (word.sub epoch γ.(cfg.start_ep))) as link.
+  iDestruct (big_sepL2_lookup_2_some with "Hepochs") as %[? ?]; [done|].
+  iDestruct (big_sepL2_lookup with "Hepochs") as "@"; [done..|].
   iNamed "Hown_serv".
-  wp_apply (wp_load_slice_elem with "[$Hsl_hist]") as "Hsl_hist"; [word|done|].
+  wp_apply (wp_load_slice_elem with "[$Hsl_epochs]") as "Hsl_epochs"; [word|done|].
   wp_apply wp_alloc as "* Hptr_link".
   wp_apply wp_alloc as "* Hptr_vrf".
   iPersist "Hptr_link Hptr_vrf".
-  wp_apply (wp_RWMutex__RUnlock with "[-HΦ]") as "Hlock".
+  wp_apply (wp_RWMutex__RUnlock with "[-HΦ HQ]") as "Hlock".
   { iFrame "∗∗ Hstr_serv #%". }
-  iApply "HΦ". iFrame "Hfld_mu ∗".
-  simpl in *.
+  iApply "HΦ".
+  iFrame "Hfld_mu ∗".
   iExists (SignedLink.mk' _ _ _), (SignedVrf.mk' _ _ _).
+  simpl in *.
   replace (W64 (uint.nat _ + sint.nat _)) with epoch by word.
   iFrame "#".
+  iPureIntro. split; [|done].
+  exact_eq Hlink_lookup. f_equal. word.
 Qed.
-*)
 
 Lemma wp_Auditor_Update a γ Q :
   {{{
@@ -476,8 +508,8 @@ Lemma wp_Auditor_Update a γ Q :
     (* pers fupd so that Auditor can add mult links,
     or even run Update as a background thread. *)
     "#Hfupd" ∷ □ (|={⊤,∅}=> ∃ σ, own_Auditor γ σ ∗
-      (∀ new_link,
-      let σ' := set state.links (.++ [new_link]) σ in
+      (∀ new_links,
+      let σ' := set state.links (.++ new_links) σ in
       own_Auditor γ σ' ={∅,⊤}=∗ Q σ'))
   }}}
   a @ (ptrT.id auditor.Auditor.id) @ "Update" #()
@@ -486,8 +518,7 @@ Lemma wp_Auditor_Update a γ Q :
     "Hlock" ∷ Auditor.lock_perm a γ ∗
     "%Hblame" ∷ ⌜ktcore.BlameSpec err
       {[ktcore.BlameServFull:=option_bool γ.(cfg.serv_good)]}⌝ ∗
-    "Herr" ∷ (if decide (err ≠ ∅) then True else
-      "HQ" ∷ Q σ)
+    "HQ" ∷ Q σ
   }}}.
 Proof. Admitted.
 
