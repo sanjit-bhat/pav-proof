@@ -424,25 +424,5 @@ Proof.
   - by rewrite last_snoc.
 Qed.
 
-(* TODO: might not need det property.
-might not directly use this in BlameSpec "simulation" arg
-across server and auditor. *)
-Definition wish_ListAudit (prevEp : w64) prevDigs cut sigPk audits digs : iProp Σ :=
-  ∃ prevDig newDigs,
-  "%Heq_digs" ∷ ⌜digs = prevDigs ++ newDigs⌝ ∗
-  "%Heq_prevDig" ∷ ⌜last prevDigs = Some prevDig⌝ ∗
-  "%Hlen_newDigs" ∷ ⌜length newDigs = length audits⌝ ∗
-  "#His_digs" ∷ ([∗ list] i ↦ aud ∈ audits,
-    ∃ dig0 dig1,
-    "%Hlook0" ∷ ⌜(prevDig :: newDigs) !! i = Some dig0⌝ ∗
-    "%Hlook1" ∷ ⌜(prevDig :: newDigs) !! (S i) = Some dig1⌝ ∗
-    "#Hwish_ListUpdate" ∷ wish_ListUpdate dig0 aud.(AuditProof.Updates) dig1) ∗
-  "#His_sigs" ∷ ([∗ list] i ↦ aud ∈ audits,
-    ∃ link,
-    let ep := (uint.nat prevEp + S i)%nat in
-    "#His_link" ∷ hashchain.is_chain (prevDigs ++ take (S i) newDigs)
-      cut link (S ep) ∗
-    "#Hwish_LinkSig" ∷ wish_LinkSig sigPk (W64 ep) link aud.(AuditProof.LinkSig)).
-
 End proof.
 End ktcore.
