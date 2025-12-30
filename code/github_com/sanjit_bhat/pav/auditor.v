@@ -98,21 +98,20 @@ Definition Auditor__Updateⁱᵐᵖˡ : val :=
     slice.for_range #ptrT "$range" (λ: "$key" "$value",
       do:  ("p" <-[#ptrT] "$value");;;
       do:  "$key";;;
-      (if: let: "$a0" := (![#ptrT] "p") in
-      (method_call #(ptrT.id Auditor.id) #"updOnce"%go (![#ptrT] "a")) "$a0"
-      then
-        let: "$r0" := ktcore.BlameServFull in
-        do:  ("err" <-[#ktcore.Blame] "$r0");;;
-        return: (![#ktcore.Blame] "err")
-      else do:  #())));;;
+      (let: "$r0" := (let: "$a0" := (![#ptrT] "p") in
+      (method_call #(ptrT.id Auditor.id) #"updOnce"%go (![#ptrT] "a")) "$a0") in
+      do:  ("err" <-[#ktcore.Blame] "$r0");;;
+      (if: (![#ktcore.Blame] "err") ≠ ktcore.BlameNone
+      then return: (![#ktcore.Blame] "err")
+      else do:  #()))));;;
     return: (![#ktcore.Blame] "err")).
 
 Definition getNextLink : go_string := "github.com/sanjit-bhat/pav/auditor.getNextLink"%go.
 
-(* go: auditor.go:66:19 *)
+(* go: auditor.go:65:19 *)
 Definition Auditor__updOnceⁱᵐᵖˡ : val :=
   λ: "a" "p",
-    exception_do (let: "err" := (mem.alloc (type.zero_val #boolT)) in
+    exception_do (let: "err" := (mem.alloc (type.zero_val #ktcore.Blame)) in
     let: "a" := (mem.alloc "a") in
     let: "p" := (mem.alloc "p") in
     let: "sigPk" := (mem.alloc (type.zero_val #cryptoffi.SigPublicKey)) in
@@ -129,6 +128,7 @@ Definition Auditor__updOnceⁱᵐᵖˡ : val :=
     let: "$r0" := (![#sliceT] (struct.field_ref #epoch #"link"%go (![#ptrT] (slice.elem_ref #ptrT (![#sliceT] (struct.field_ref #history #"epochs"%go (![#ptrT] "hist"))) ((let: "$a0" := (![#sliceT] (struct.field_ref #history #"epochs"%go (![#ptrT] "hist"))) in
     slice.len "$a0") - #(W64 1)))))) in
     do:  ("prevLink" <-[#sliceT] "$r0");;;
+    let: "errb" := (mem.alloc (type.zero_val #boolT)) in
     let: "link" := (mem.alloc (type.zero_val #sliceT)) in
     let: "dig" := (mem.alloc (type.zero_val #sliceT)) in
     let: "ep" := (mem.alloc (type.zero_val #uint64T)) in
@@ -145,9 +145,12 @@ Definition Auditor__updOnceⁱᵐᵖˡ : val :=
     do:  ("ep" <-[#uint64T] "$r0");;;
     do:  ("dig" <-[#sliceT] "$r1");;;
     do:  ("link" <-[#sliceT] "$r2");;;
-    do:  ("err" <-[#boolT] "$r3");;;
-    (if: ![#boolT] "err"
-    then return: (![#boolT] "err")
+    do:  ("errb" <-[#boolT] "$r3");;;
+    (if: ![#boolT] "errb"
+    then
+      let: "$r0" := ktcore.BlameServFull in
+      do:  ("err" <-[#ktcore.Blame] "$r0");;;
+      return: (![#ktcore.Blame] "err")
     else do:  #());;;
     let: "sig" := (mem.alloc (type.zero_val #sliceT)) in
     let: "$r0" := (let: "$a0" := (![#ptrT] (struct.field_ref #Auditor #"sk"%go (![#ptrT] "a"))) in
@@ -174,7 +177,7 @@ Definition Auditor__updOnceⁱᵐᵖˡ : val :=
     do:  ((struct.field_ref #history #"epochs"%go (![#ptrT] "hist")) <-[#sliceT] "$r0");;;
     let: "$r0" := (![#ptrT] "hist") in
     do:  ((struct.field_ref #Auditor #"hist"%go (![#ptrT] "a")) <-[#ptrT] "$r0");;;
-    return: (![#boolT] "err")).
+    return: (![#ktcore.Blame] "err")).
 
 Definition SignedVrf : go_type := structT [
   "VrfPk" :: sliceT;

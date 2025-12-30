@@ -30,6 +30,7 @@ Record t :=
     adtr_sig_pk: list w8;
     sigpredγ: ktcore.sigpred_cfg.t;
     vrf_pk: list w8;
+    (* TODO: maybe move to history. *)
     start_ep: w64;
     serv_good: option $ server.cfg.t;
   }.
@@ -61,7 +62,6 @@ Record t :=
   mk' {
     digs: list $ list w8;
     cut: option $ list w8;
-    maps: list (gmap (list w8) (list w8));
   }.
 
 Section proof.
@@ -82,13 +82,14 @@ Definition own ptr obj γ σ q : iProp Σ :=
     uint.Z last_ep⌝.
 
 Definition own_gs obj γ σ q : iProp Σ :=
+  ∃ maps,
   "#Hgs_startEp" ∷ ghost_var γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.startEp)
     (□) γ.(cfg.start_ep) ∗
   (* 1/2 own in fupd inv. *)
   "Hgs_links" ∷ mono_list_auth_own γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.links)
     (q/2) σ.(state.links) ∗
   "#Hinv_sigpred" ∷ ktcore.sigpred_links_inv σ.(state.links) obj.(digs)
-    obj.(cut) obj.(maps).
+    obj.(cut) maps.
 
 Definition align_serv obj γ σ servγ : iProp Σ :=
   ∃ hist,
@@ -600,26 +601,36 @@ Lemma wp_Auditor_updOnce ptr_a a γ σ Q ptr_p p :
   {{{
     is_pkg_init auditor ∗
     "Hadtr" ∷ Auditor.own ptr_a a γ σ 1 ∗
-    "#Hproof" ∷ ktcore.AuditProof.own ptr_p p (□) ∗
     "#Hfupd" ∷ □ (|={⊤,∅}=> ∃ σ, own_Auditor γ σ ∗
       (∀ new_links,
       let σ' := set state.links (.++ new_links) σ in
-      own_Auditor γ σ' ={∅,⊤}=∗ Q σ'))
+      own_Auditor γ σ' ={∅,⊤}=∗ Q σ')) ∗
+
+    "#Hproof" ∷ ktcore.AuditProof.own ptr_p p (□) ∗
+    "#Hgood" ∷ match γ.(cfg.serv_good) with None => True | Some servγ =>
+      ∃ ep dig link,
+      let hist' := set history.digs (.++ [dig]) a.(Auditor.hist) in
+      let σ' := set state.links (.++ [link]) σ in
+      "#Hwish_getNextLink" ∷ wish_getNextLink a.(Auditor.hist) γ σ p ep dig link ∗
+      "#Halign_next" ∷ history.align_serv hist' γ σ' servγ end
   }}}
   ptr_a @ (ptrT.id auditor.Auditor.id) @ "updOnce" #ptr_p
   {{{
-    err, RET #err;
+    err, RET #(ktcore.blame_to_u64 err);
+    "%Hblame" ∷ ⌜ktcore.BlameSpec err
+      {[ktcore.BlameServFull:=option_bool γ.(cfg.serv_good)]}⌝ ∗
     "Herr" ∷
-      match err with
-      | true =>
+      (if decide (err ≠ ∅)
+      then
         "Hadtr" ∷ Auditor.own ptr_a a γ σ 1 ∗
         "HQ" ∷ Q σ
-      | false =>
-        ∃ new_link,
+      else
+        ∃ new_dig new_link,
+        let a' := set Auditor.hist
+          (set history.digs (.++ [new_dig])) a in
         let σ' := set state.links (.++ [new_link]) σ in
-        "Hadtr" ∷ Auditor.own ptr_a a γ σ' 1 ∗
-        "HQ" ∷ Q σ'
-      end
+        "Hadtr" ∷ Auditor.own ptr_a a' γ σ' 1 ∗
+        "HQ" ∷ Q σ')
   }}}.
 Proof. Admitted.
 
