@@ -125,15 +125,23 @@ Lemma wp_CallAudit s γ (prevEpoch : w64) :
       "#Hsl_proof" ∷ ktcore.AuditProofSlice1D.own sl_proof proof (□) ∗
 
       "Hgood" ∷ match γ with None => True | Some cfg =>
-        ∃ servHist prevDig,
+        ∃ servHist,
         "#Hlb_servHist" ∷ mono_list_lb_own cfg.(cfg.histγ) servHist ∗
         "%Hlen_epochs" ∷ ⌜uint.nat prevEpoch < length servHist⌝ ∗
-        "%Heq_prevDig" ∷ ⌜servHist.*1 !! (uint.nat prevEpoch) = Some prevDig⌝ ∗
 
-        "#Hwish_proof" ∷ ktcore.wish_ListAudit prevEpoch
-          (take (S $ uint.nat prevEpoch) servHist.*1)
-          None cfg.(cfg.sig_pk) proof
-          (drop (S $ uint.nat prevEpoch) servHist.*1) end)
+        "#His_upds" ∷ ([∗ list] i ↦ aud ∈ proof,
+          ∃ dig0 dig1,
+          let predEp := (uint.nat prevEpoch + i)%nat in
+          "%Hlook0" ∷ ⌜servHist !! predEp = Some dig0⌝ ∗
+          "%Hlook1" ∷ ⌜servHist !! (S predEp) = Some dig1⌝ ∗
+          "#His_upd" ∷ ktcore.wish_ListUpdate dig0 aud.(ktcore.AuditProof.Updates) dig1) ∗
+        "#His_sigs" ∷ ([∗ list] i ↦ aud ∈ proof,
+          ∃ link,
+          let ep := (uint.nat prevEpoch + S i)%nat in
+          "#His_link" ∷ hashchain.is_chain (take (S ep) servHist)
+            None link (S ep) ∗
+          "#His_sig" ∷ ktcore.wish_LinkSig cfg.(cfg.sig_pk) (W64 ep) link aud.(ktcore.AuditProof.LinkSig))
+          end)
   }}}.
 Proof. Admitted.
 

@@ -393,15 +393,22 @@ Lemma wp_Server_Audit s γ (prevEpoch : w64) Q :
       match err with
       | true => ⌜uint.nat prevEpoch ≥ length σ.(state.hist)⌝
       | false =>
-        ∃ proof prevDig,
+        ∃ proof,
         "#Hsl_proof" ∷ ktcore.AuditProofSlice1D.own sl_proof proof (□) ∗
+        "#His_upds" ∷ ([∗ list] i ↦ aud ∈ proof,
+          ∃ dig0 dig1,
+          let predEp := (uint.nat prevEpoch + i)%nat in
+          "%Hlook0" ∷ ⌜σ.(state.hist).*1 !! predEp = Some dig0⌝ ∗
+          "%Hlook1" ∷ ⌜σ.(state.hist).*1 !! (S predEp) = Some dig1⌝ ∗
+          "#His_upd" ∷ ktcore.wish_ListUpdate dig0 aud.(ktcore.AuditProof.Updates) dig1) ∗
+        "#His_sigs" ∷ ([∗ list] i ↦ aud ∈ proof,
+          ∃ link,
+          let ep := (uint.nat prevEpoch + S i)%nat in
+          "#His_link" ∷ hashchain.is_chain (take (S ep) σ.(state.hist).*1)
+            None link (S ep) ∗
+          "#His_sig" ∷ ktcore.wish_LinkSig γ.(cfg.sig_pk) (W64 ep) link aud.(ktcore.AuditProof.LinkSig))
 
-        "%Heq_prevDig" ∷ ⌜σ.(state.hist).*1 !! (uint.nat prevEpoch) = Some prevDig⌝ ∗
-        "#Hwish_proof" ∷ ktcore.wish_ListAudit prevEpoch
-          (take (S $ uint.nat prevEpoch) σ.(state.hist).*1)
-          None γ.(cfg.sig_pk) proof
-          (drop (S $ uint.nat prevEpoch) σ.(state.hist).*1)
-        (* no need to explicitly state update labels and vals.
+        (* NOTE: no need to explicitly state update labels and vals.
         those are tied down by UpdateProof, which is tied into server's digs.
         dig only commits to one map, which lets auditor know it shares
         same maps as server. *)
