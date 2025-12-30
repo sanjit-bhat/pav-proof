@@ -61,6 +61,7 @@ Record t :=
   mk' {
     digs: list $ list w8;
     cut: option $ list w8;
+    maps: list (gmap (list w8) (list w8));
   }.
 
 Section proof.
@@ -81,11 +82,13 @@ Definition own ptr obj γ σ q : iProp Σ :=
     uint.Z last_ep⌝.
 
 Definition own_gs obj γ σ q : iProp Σ :=
-  ∃ maps,
-  "#Hgs_startEp" ∷ ghost_var γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.startEp) (□) γ.(cfg.start_ep) ∗
+  "#Hgs_startEp" ∷ ghost_var γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.startEp)
+    (□) γ.(cfg.start_ep) ∗
   (* 1/2 own in fupd inv. *)
-  "Hgs_links" ∷ mono_list_auth_own γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.links) (q/2) σ.(state.links) ∗
-  "#Hinv_sigpred" ∷ ktcore.sigpred_links_inv σ.(state.links) obj.(digs) obj.(cut) maps.
+  "Hgs_links" ∷ mono_list_auth_own γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.links)
+    (q/2) σ.(state.links) ∗
+  "#Hinv_sigpred" ∷ ktcore.sigpred_links_inv σ.(state.links) obj.(digs)
+    obj.(cut) obj.(maps).
 
 Definition align_serv obj γ σ servγ : iProp Σ :=
   ∃ hist,
@@ -125,12 +128,17 @@ End proof.
 End serv.
 
 Module Auditor.
+Record t :=
+  mk' {
+    hist: history.t;
+  }.
+
 Section proof.
 Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
 Context `{!pavG Σ}.
 
-Definition own ptr γ σ q : iProp Σ :=
-  ∃ ptr_sk ptr_hist hist ptr_serv,
+Definition own ptr obj γ σ q : iProp Σ :=
+  ∃ ptr_sk ptr_hist ptr_serv,
   (* separate struct fields bc "mu" contained in lock perm. *)
   "#Hfld_sk" ∷ ptr ↦s[auditor.Auditor::"sk"]□ ptr_sk ∗
   "Hfld_hist" ∷ ptr ↦s[auditor.Auditor::"hist"]{#q} ptr_hist ∗
@@ -139,19 +147,19 @@ Definition own ptr γ σ q : iProp Σ :=
   "#Hown_sk" ∷ cryptoffi.own_sig_sk ptr_sk γ.(cfg.adtr_sig_pk)
     (ktcore.sigpred γ.(cfg.sigpredγ)) ∗
 
-  "Hown_hist" ∷ history.own ptr_hist hist γ σ q ∗
-  "Hown_gs_hist" ∷ history.own_gs hist γ σ q ∗
+  "Hown_hist" ∷ history.own ptr_hist obj.(hist) γ σ q ∗
+  "Hown_gs_hist" ∷ history.own_gs obj.(hist) γ σ q ∗
   "#Halign_hist" ∷ match γ.(cfg.serv_good) with None => True | Some servγ =>
-    history.align_serv hist γ σ servγ end ∗
+    history.align_serv obj.(hist) γ σ servγ end ∗
 
   "#Hown_serv" ∷ serv.own ptr_serv γ γ.(cfg.serv_good) ∗
   "#Halign_serv" ∷ match γ.(cfg.serv_good) with None => True | Some servγ =>
     serv.align_serv γ servγ end.
 
 Definition lock_perm ptr γ : iProp Σ :=
-  ∃ ptr_mu σ,
+  ∃ ptr_mu adtr σ,
   "#Hfld_mu" ∷ ptr ↦s[auditor.Auditor::"mu"]□ ptr_mu ∗
-  "Hperm" ∷ own_RWMutex ptr_mu (own ptr γ σ).
+  "Hperm" ∷ own_RWMutex ptr_mu (own ptr adtr γ σ).
 
 End proof.
 End Auditor.
@@ -392,6 +400,92 @@ Proof.
     iApply ktcore.wish_ListUpdate_grow; iFrame "#".
 Qed.
 
+Definition wish_getNextLink hist γ σ proof (ep : w64) dig link : iProp Σ :=
+  ∃ prevDig,
+  "%Heq_ep" ∷ ⌜uint.Z ep = (uint.Z γ.(cfg.start_ep) + length σ.(state.links))%Z⌝ ∗
+  "%Heq_prevDig" ∷ ⌜last hist.(history.digs) = Some prevDig⌝ ∗
+  "#His_upd" ∷ ktcore.wish_ListUpdate prevDig
+    proof.(ktcore.AuditProof.Updates) dig ∗
+  "#His_link" ∷ hashchain.is_chain (hist.(history.digs) ++ [dig])
+    hist.(history.cut) link (S $ uint.nat ep) ∗
+  (* TODO: change γ.sig_pk if messy to state γ corresp with serv. *)
+  "#His_sig" ∷ ktcore.wish_LinkSig γ.(cfg.serv_sig_pk) ep link
+    proof.(ktcore.AuditProof.LinkSig).
+
+Lemma wish_getNextLink_det hist γ σ proof ep0 dig0 link0 ep1 dig1 link1 :
+  wish_getNextLink hist γ σ proof ep0 dig0 link0 -∗
+  wish_getNextLink hist γ σ proof ep1 dig1 link1 -∗
+  ⌜ep0 = ep1 ∧ dig0 = dig1 ∧ link0 = link1⌝.
+Proof.
+  iNamedSuffix 1 "0".
+  iNamedSuffix 1 "1".
+  simplify_eq/=.
+  iDestruct (ktcore.wish_ListUpdate_det with "His_upd0 His_upd1") as %->.
+  iDestruct (hashchain.is_chain_det with "His_link0 His_link1") as %->.
+  iPureIntro. repeat split. word.
+Qed.
+
+Lemma wp_getNextLink hist γ σ sl_sigPk (prevEp : w64) sl_prevDig prevDig
+    sl_prevLink prevLink ptr_p proof prevMap :
+  {{{
+    is_pkg_init auditor ∗
+    "#Hsl_sigPk" ∷ sl_sigPk ↦*□ γ.(cfg.serv_sig_pk) ∗
+    "#Hsl_prevDig" ∷ sl_prevDig ↦*□ prevDig ∗
+    "#Hsl_prevLink" ∷ sl_prevLink ↦*□ prevLink ∗
+    "#Hproof" ∷ ktcore.AuditProof.own ptr_p proof (□) ∗
+
+    "%Heq_prevEp" ∷ ⌜uint.Z prevEp = uint.Z γ.(cfg.start_ep) +
+      length σ.(state.links) - 1⌝ ∗
+    "%Heq_prevDig" ∷ ⌜last hist.(history.digs) = Some prevDig⌝ ∗
+    "#His_prevLink" ∷ hashchain.is_chain hist.(history.digs)
+      hist.(history.cut) prevLink (S $ uint.nat prevEp) ∗
+    "#His_prevMap" ∷ merkle.is_map prevMap prevDig
+  }}}
+  @! auditor.getNextLink #sl_sigPk #prevEp #sl_prevDig #sl_prevLink #ptr_p
+  {{{
+    ep sl_dig sl_link err, RET (#ep, #sl_dig, #sl_link, #err);
+    "Hgenie" ∷
+      match err with
+      | true => ¬ ∃ ep dig link, wish_getNextLink hist γ σ proof ep dig link
+      | false =>
+        ∃ dig link map,
+        "#Hsl_dig" ∷ sl_dig ↦*□ dig ∗
+        "#Hsl_link" ∷ sl_link ↦*□ link ∗
+        "#Hwish_getNextLink" ∷ wish_getNextLink hist γ σ proof ep dig link ∗
+        "#His_map" ∷ merkle.is_map map dig ∗
+        "%Hsub" ∷ ⌜prevMap ⊆ map⌝
+      end
+  }}}.
+Proof.
+  wp_start as "@". wp_auto.
+  iNamed "Hproof".
+  wp_apply std.wp_SumNoOverflow.
+  wp_if_destruct.
+  2: { iApply "HΦ". iNamedSuffix 1 "0". word. }
+  wp_apply wp_getNextDig as "* @".
+  { iFrame "#". }
+  wp_if_destruct.
+  { iApply "HΦ". iNamedSuffix 1 "0". iApply "Hgenie".
+    simplify_eq/=. iFrame "#". }
+  iNamed "Hgenie".
+  wp_apply hashchain.wp_GetNextLink as "* H".
+  { iFrame "#". }
+  iDestruct "H" as "(_&_&H)".
+  iNamed "H". iPersist "Hsl_nextLink".
+  wp_apply ktcore.wp_VerifyLinkSig as "* @".
+  { iFrame "#". }
+  wp_if_destruct.
+  { iApply "HΦ". iNamedSuffix 1 "0". iApply "Hgenie".
+    simplify_eq/=.
+    iDestruct (ktcore.wish_ListUpdate_det with "Hwish_ListUpdate His_upd0") as %<-.
+    iDestruct (hashchain.is_chain_det with "His_chain His_link0") as %->.
+    iExactEq "His_sig0". f_equal. word. }
+  iNamed "Hgenie".
+  iApply "HΦ". iFrame "#%".
+  iSplit; [word|].
+  iExactEq "His_chain". rewrite /named. f_equal. word.
+Qed.
+
 Definition wish_SignedLink servPk adtrPk ep link : iProp Σ :=
   "#Hwish_adtr_sig" ∷ ktcore.wish_LinkSig adtrPk ep
     link.(SignedLink.Link) link.(SignedLink.AdtrSig) ∗
@@ -406,7 +500,8 @@ Definition wish_SignedVrf servPk adtrPk vrf : iProp Σ :=
 
 Definition own_Auditor γ σ :=
   (* other 1/2 in lock inv. *)
-  "Hgs_links" ∷ mono_list_auth_own γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.links) (1/2) σ.(state.links).
+  "Hgs_links" ∷ mono_list_auth_own γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.links)
+    (1/2) σ.(state.links).
 
 Definition is_adtr_inv γ := inv nroot (∃ σ, own_Auditor γ σ).
 
@@ -500,6 +595,33 @@ Proof.
   iPureIntro. split; [|done].
   exact_eq Hlink_lookup. f_equal. word.
 Qed.
+
+Lemma wp_Auditor_updOnce ptr_a a γ σ Q ptr_p p :
+  {{{
+    is_pkg_init auditor ∗
+    "Hadtr" ∷ Auditor.own ptr_a a γ σ 1 ∗
+    "#Hproof" ∷ ktcore.AuditProof.own ptr_p p (□) ∗
+    "#Hfupd" ∷ □ (|={⊤,∅}=> ∃ σ, own_Auditor γ σ ∗
+      (∀ new_links,
+      let σ' := set state.links (.++ new_links) σ in
+      own_Auditor γ σ' ={∅,⊤}=∗ Q σ'))
+  }}}
+  ptr_a @ (ptrT.id auditor.Auditor.id) @ "updOnce" #ptr_p
+  {{{
+    err, RET #err;
+    "Herr" ∷
+      match err with
+      | true =>
+        "Hadtr" ∷ Auditor.own ptr_a a γ σ 1 ∗
+        "HQ" ∷ Q σ
+      | false =>
+        ∃ new_link,
+        let σ' := set state.links (.++ [new_link]) σ in
+        "Hadtr" ∷ Auditor.own ptr_a a γ σ' 1 ∗
+        "HQ" ∷ Q σ'
+      end
+  }}}.
+Proof. Admitted.
 
 Lemma wp_Auditor_Update a γ Q :
   {{{
