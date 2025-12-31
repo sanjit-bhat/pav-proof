@@ -22,7 +22,7 @@ Record t :=
   }.
 End state.
 
-(* cfg is the global info we know about this party, if good. *)
+(* cfg is the static state we know about this party, if good. *)
 Module cfg.
 Record t :=
   mk {
@@ -30,7 +30,6 @@ Record t :=
     adtr_sig_pk: list w8;
     sigpredγ: ktcore.sigpred_cfg.t;
     vrf_pk: list w8;
-    (* TODO: maybe move to history. *)
     start_ep: w64;
     serv_good: option $ server.cfg.t;
   }.
@@ -81,15 +80,12 @@ Definition own ptr obj γ σ q : iProp Σ :=
   "%Hinb_ep" ∷ ⌜uint.Z γ.(cfg.start_ep) + length σ.(state.links) - 1 =
     uint.Z last_ep⌝.
 
-Definition own_gs obj γ σ q : iProp Σ :=
-  ∃ maps,
+Definition own_gs γ σ q : iProp Σ :=
   "#Hgs_startEp" ∷ ghost_var γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.startEp)
     (□) γ.(cfg.start_ep) ∗
   (* 1/2 own in fupd inv. *)
   "Hgs_links" ∷ mono_list_auth_own γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.links)
-    (q/2) σ.(state.links) ∗
-  "#Hinv_sigpred" ∷ ktcore.sigpred_links_inv σ.(state.links) obj.(digs)
-    obj.(cut) maps.
+    (q/2) σ.(state.links).
 
 Definition align_serv obj γ σ servγ : iProp Σ :=
   ∃ hist,
@@ -139,7 +135,7 @@ Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}
 Context `{!pavG Σ}.
 
 Definition own ptr obj γ σ q : iProp Σ :=
-  ∃ ptr_sk ptr_hist ptr_serv,
+  ∃ ptr_sk ptr_hist ptr_serv maps,
   (* separate struct fields bc "mu" contained in lock perm. *)
   "#Hfld_sk" ∷ ptr ↦s[auditor.Auditor::"sk"]□ ptr_sk ∗
   "Hfld_hist" ∷ ptr ↦s[auditor.Auditor::"hist"]{#q} ptr_hist ∗
@@ -149,7 +145,9 @@ Definition own ptr obj γ σ q : iProp Σ :=
     (ktcore.sigpred γ.(cfg.sigpredγ)) ∗
 
   "Hown_hist" ∷ history.own ptr_hist obj.(hist) γ σ q ∗
-  "Hown_gs_hist" ∷ history.own_gs obj.(hist) γ σ q ∗
+  "Hown_gs_hist" ∷ history.own_gs γ σ q ∗
+  "#Hinv_sigpred" ∷ ktcore.sigpred_links_inv γ.(cfg.start_ep) σ.(state.links)
+    obj.(hist).(history.digs) obj.(hist).(history.cut) maps ∗
   "#Halign_hist" ∷ match γ.(cfg.serv_good) with None => True | Some servγ =>
     history.align_serv obj.(hist) γ σ servγ end ∗
 
@@ -506,8 +504,8 @@ Definition own_Auditor γ σ :=
 
 Definition is_adtr_inv γ := inv nroot (∃ σ, own_Auditor γ σ).
 
-Lemma unify_adtr_gs obj γ σ σ' q :
-  history.own_gs obj γ σ q -∗
+Lemma unify_adtr_gs γ σ σ' q :
+  history.own_gs γ σ q -∗
   own_Auditor γ σ' -∗
   ⌜σ' = σ⌝.
 Proof.
@@ -632,7 +630,52 @@ Lemma wp_Auditor_updOnce ptr_a a γ σ Q ptr_p p :
         "Hadtr" ∷ Auditor.own ptr_a a' γ σ' 1 ∗
         "HQ" ∷ Q σ')
   }}}.
-Proof. Admitted.
+Proof.
+  wp_start as "@".
+  iNamed "Hadtr". iNamed "Hown_hist". iNamed "Hown_serv". wp_auto.
+  destruct a, hist. simpl in *.
+  iDestruct (own_slice_len with "Hsl_epochs") as %[? ?].
+  iDestruct (big_sepL2_length with "Hepochs") as %?.
+  list_elem σ.(state.links)
+    (sint.nat (word.sub sl_epochs.(slice.len_f) (W64 1))) as prevLink.
+  iDestruct (big_sepL2_lookup_2_some with "Hepochs") as %[? ?]; [done|].
+  iDestruct (big_sepL2_lookup with "Hepochs") as "@"; [done..|].
+  wp_pure; [word|].
+  wp_apply (wp_load_slice_elem with "[$Hsl_epochs]") as "Hsl_epochs"; [word|done|].
+
+  simpl in *.
+  iNamed "Hinv_sigpred".
+  iDestruct (big_sepL_lookup with "Hlinks") as "@"; [done|].
+  rewrite take_ge; [|word].
+  iDestruct (big_sepL2_lookup_1_some with "Hmaps") as %[? ?]; [done|].
+  iDestruct (big_sepL2_lookup with "Hmaps") as "@"; [done..|].
+  replace (length digs - _ + _)%nat with (pred $ length digs) in Hlook_dig by word.
+  rewrite -last_lookup in Hlook_dig.
+  simplify_eq/=.
+  wp_apply (wp_getNextLink (history.mk' digs cut) γ σ) as "* @".
+  { simpl. iFrame "#%".
+    iSplit; [word|].
+    rewrite /named. iExactEq "His_link". f_equal. word. }
+  rewrite -wp_fupd.
+  wp_if_destruct.
+  { iMod "Hfupd" as "(%&Hadtr&Hfupd)".
+    iDestruct (unify_adtr_gs with "Hown_gs_hist Hadtr") as %->.
+    destruct σ.
+    iSpecialize ("Hfupd" $! []).
+    list_simplifier.
+    iMod ("Hfupd" with "Hadtr") as "HQ".
+    iModIntro.
+    rewrite ktcore.rw_BlameServFull.
+    iApply "HΦ".
+    iSplit.
+    2: { case_decide; try done. iFrame "∗ Hstr_serv #%". }
+    iApply ktcore.blame_one.
+    iIntros (?).
+    case_match; try done.
+    iApply "Hgenie".
+    iNamed "Hgood".
+    iFrame "#". }
+Admitted.
 
 Lemma wp_Auditor_Update a γ Q :
   {{{

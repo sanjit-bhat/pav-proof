@@ -29,13 +29,16 @@ Definition sigpred_vrf γ enc : iProp Σ :=
 
   "#Hshot" ∷ ghost_var γ (□) vrfPk.
 
-Definition sigpred_links_inv links digs cut maps : iProp Σ :=
-  (* [offset] is the number of digs prior to links starting. *)
+Definition sigpred_links_inv (startEp : w64) links digs cut maps : iProp Σ :=
+  (* [offset] is the number of [digs] prior to [links] starting.
+  we leave [digs] un-tied to [startEp], even tho it's implicitly
+  constrained by [is_chain]. *)
   let offset := (length digs - length links)%nat in
+  "%Hlt_digs_links" ∷ ⌜length links ≤ length digs⌝ ∗
   "#Hlinks" ∷ ([∗ list] idx ↦ link ∈ links,
     let n_digs := (offset + idx + 1)%nat in
-    "#His_link" ∷ hashchain.is_chain (take n_digs digs) cut link n_digs) ∗
-  "%Hlt_links" ∷ ⌜length links ≤ length digs⌝ ∗
+    let ep := (uint.nat startEp + idx)%nat in
+    "#His_link" ∷ hashchain.is_chain (take n_digs digs) cut link (S ep)) ∗
   "#Hmaps" ∷ ([∗ list] idx ↦ _;m ∈ links;maps,
     ∃ dig,
     "%Hlook_dig" ∷ ⌜digs !! (offset + idx)%nat = Some dig⌝ ∗
@@ -55,7 +58,7 @@ Definition sigpred_links γstartEp γlinks enc : iProp Σ :=
   "#Hshot" ∷ ghost_var γstartEp (□) startEp ∗
   "#Hlb" ∷ mono_list_lb_own γlinks links ∗
   "%Hlook" ∷ ⌜links !! (uint.nat ep - uint.nat startEp)%nat = Some link⌝ ∗
-  "#Hinv" ∷ sigpred_links_inv links digs cut maps.
+  "#Hinv" ∷ sigpred_links_inv startEp links digs cut maps.
 
 Definition sigpred γ enc : iProp Σ :=
   sigpred_vrf γ.(sigpred_cfg.vrf) enc ∨
