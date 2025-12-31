@@ -81,7 +81,7 @@ Definition own ptr obj γ σ q : iProp Σ :=
     uint.Z last_ep⌝.
 
 Definition own_gs γ σ q : iProp Σ :=
-  "#Hgs_startEp" ∷ ghost_var γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.startEp)
+  "#Hgs_start_ep" ∷ ghost_var γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.start_ep)
     (□) γ.(cfg.start_ep) ∗
   (* 1/2 own in fupd inv. *)
   "Hgs_links" ∷ mono_list_auth_own γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.links)

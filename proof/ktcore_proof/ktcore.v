@@ -2,16 +2,17 @@ From New.generatedproof.github_com.sanjit_bhat.pav Require Import ktcore.
 From New.proof.github_com.sanjit_bhat.pav Require Import prelude.
 
 From New.proof.github_com.sanjit_bhat.pav Require Import
-  cryptoffi cryptoutil hashchain merkle.
+  cryptoffi cryptoutil hashchain merkle safemarshal.
 
 From New.proof.github_com.sanjit_bhat.pav.ktcore_proof Require Import
-  serde.
+  serde sigpred.
 
 Module ktcore.
-Import serde.ktcore.
+Import serde.ktcore sigpred.ktcore.
 
 Section proof.
 Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
+Context `{!pavG Σ}.
 
 Definition wish_VrfSig pk vrfPk sig : iProp Σ :=
   let obj := VrfSig.mk' (W8 VrfSigTag) vrfPk in
@@ -19,18 +20,17 @@ Definition wish_VrfSig pk vrfPk sig : iProp Σ :=
   "#His_sig" ∷ cryptoffi.is_sig pk enc sig ∗
   "%Hvalid" ∷ ⌜VrfSig.valid obj⌝.
 
-Lemma wp_SignVrf ptr_sk pk P sl_vrfPk vrfPk :
-  let enc := VrfSig.pure_enc (VrfSig.mk' (W8 VrfSigTag) vrfPk) in
+Lemma wp_SignVrf ptr_sk pk γ sl_vrfPk vrfPk :
   {{{
     is_pkg_init ktcore ∗
-    "#Hown_sig_sk" ∷ cryptoffi.own_sig_sk ptr_sk pk P ∗
+    "#Hown_sig_sk" ∷ cryptoffi.own_sig_sk ptr_sk pk (sigpred γ) ∗
     "#Hsl_vrfPk" ∷ sl_vrfPk ↦*□ vrfPk ∗
-    "HP" ∷ P enc
+    "#Hsigpred" ∷ sigpred_vrf γ vrfPk
   }}}
   @! ktcore.SignVrf #ptr_sk #sl_vrfPk
   {{{
     sl_sig sig, RET #sl_sig;
-    "Hsl_sig" ∷ sl_sig ↦* sig ∗
+    "#Hsl_sig" ∷ sl_sig ↦*□ sig ∗
     "#Hwish_vrfSig" ∷ wish_VrfSig pk vrfPk sig
   }}}.
 Proof.
@@ -42,8 +42,16 @@ Proof.
     as "* (Hsl_b&Hcap_b&_&(_&%Hvalid))".
   { iFrame "#". }
   simpl in *.
-  wp_apply (cryptoffi.wp_SigPrivateKey_Sign with "[$Hsl_b $HP]") as "* @".
-  { iFrame "#". }
+  iDestruct (own_slice_len with "Hsl_vrfPk") as %[? ?].
+  rewrite -wp_fupd.
+  wp_apply (cryptoffi.wp_SigPrivateKey_Sign with "[$Hsl_b]") as "* @".
+  { iFrame "#".
+    iLeft. iExists _.
+    iSplit; [done|].
+    iFrame "#".
+    rewrite /safemarshal.Slice1D.valid. word. }
+  iPersist "Hsl_sig".
+  iModIntro.
   iApply "HΦ".
   by iFrame "∗#".
 Qed.
@@ -90,18 +98,17 @@ Definition wish_LinkSig pk ep link sig : iProp Σ :=
   "#His_sig" ∷ cryptoffi.is_sig pk enc sig ∗
   "%Hvalid" ∷ ⌜LinkSig.valid obj⌝.
 
-Lemma wp_SignLink ptr_sk pk P epoch sl_link link :
-  let enc := LinkSig.pure_enc (LinkSig.mk' (W8 LinkSigTag) epoch link) in
+Lemma wp_SignLink ptr_sk pk γ epoch sl_link link :
   {{{
     is_pkg_init ktcore ∗
-    "#Hown_sig_sk" ∷ cryptoffi.own_sig_sk ptr_sk pk P ∗
+    "#Hown_sig_sk" ∷ cryptoffi.own_sig_sk ptr_sk pk (sigpred γ) ∗
     "#Hsl_link" ∷ sl_link ↦*□ link ∗
-    "HP" ∷ P enc
+    "#Hsigpred" ∷ sigpred_links γ epoch link
   }}}
   @! ktcore.SignLink #ptr_sk #epoch #sl_link
   {{{
     sl_sig sig, RET #sl_sig;
-    "Hsl_sig" ∷ sl_sig ↦* sig ∗
+    "#Hsl_sig" ∷ sl_sig ↦*□ sig ∗
     "#Hwish_linkSig" ∷ wish_LinkSig pk epoch link sig
   }}}.
 Proof.
@@ -113,8 +120,16 @@ Proof.
     as "* (Hsl_b&Hcap_b&_&(_&%Hvalid))".
   { iFrame "#". }
   simpl in *.
-  wp_apply (cryptoffi.wp_SigPrivateKey_Sign with "[$Hsl_b $HP]") as "* @".
-  { iFrame "#". }
+  iDestruct (own_slice_len with "Hsl_link") as %[? ?].
+  rewrite -wp_fupd.
+  wp_apply (cryptoffi.wp_SigPrivateKey_Sign with "[$Hsl_b]") as "* @".
+  { iFrame "#".
+    iRight. repeat iExists _.
+    iSplit; [done|].
+    iFrame "#".
+    rewrite /safemarshal.Slice1D.valid. word. }
+  iPersist "Hsl_sig".
+  iModIntro.
   iApply "HΦ".
   by iFrame "∗#".
 Qed.
