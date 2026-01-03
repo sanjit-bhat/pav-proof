@@ -68,16 +68,15 @@ Definition sigpred γ enc : iProp Σ :=
 #[global] Instance sigpred_pers γ e : Persistent (sigpred γ e).
 Proof. apply _. Qed.
 
-Lemma sigpred_links_inv_grow start_ep links link digs dig cut maps m prev_map :
-  last maps = Some prev_map →
-  prev_map ⊆ m →
+Lemma sigpred_links_inv_grow start_ep links link digs dig cut maps m :
+  (∀ prev_map, last maps = Some prev_map → prev_map ⊆ m) →
   sigpred_links_inv start_ep links digs cut maps -∗
+  merkle.is_map m dig -∗
   hashchain.is_chain (digs ++ [dig]) cut link
     (uint.nat start_ep + length links + 1)%nat -∗
-  merkle.is_map m dig -∗
   sigpred_links_inv start_ep (links ++ [link]) (digs ++ [dig]) cut (maps ++ [m]).
 Proof.
-  iIntros (Hlast_map Hsub) "@ #His_link #His_map".
+  iIntros (Hsub) "@ #His_map #His_link".
   rewrite /sigpred_links_inv.
   autorewrite with len in *.
   iSplit; [word|].
@@ -106,7 +105,7 @@ Proof.
         rewrite list_lookup_singleton_Some.
         iPureIntro. split; [|done]. word.
       + done. }
-  { iPureIntro. apply list_reln_snoc; [done|]. naive_solver. }
+  { iPureIntro. by apply list_reln_snoc. }
 Qed.
 
 End proof.

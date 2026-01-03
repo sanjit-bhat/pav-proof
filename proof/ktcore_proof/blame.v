@@ -74,7 +74,7 @@ Lemma rw_Blame0 err :
 Proof. Admitted.
 
 Lemma rw_BlameNone :
-  ktcore.BlameNone = # (blame_to_u64 ∅).
+  # (W64 0) = # (blame_to_u64 ∅).
 Proof. Admitted.
 
 (* TODO: would be nice to re-use Blame defs from code file.

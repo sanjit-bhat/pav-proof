@@ -73,7 +73,7 @@ Definition own ptr obj γ σ q : iProp Σ :=
   "#Hsl_lastDig" ∷ sl_lastDig ↦*□ lastDig ∗
   "%Heq_lastDig" ∷ ⌜last obj.(digs) = Some lastDig⌝ ∗
   "Hsl_epochs" ∷ sl_epochs ↦*{#q} sl0_epochs ∗
-  "Hcap_hist" ∷ own_slice_cap loc sl_epochs (DfracOwn q) ∗
+  "Hcap_epochs" ∷ own_slice_cap loc sl_epochs (DfracOwn q) ∗
   "#Hepochs" ∷ ([∗ list] idx ↦ p;o ∈ sl0_epochs;σ.(state.links),
     epoch.own p (epoch.mk' o) (uint.nat γ.(cfg.start_ep) + idx) γ) ∗
   "%Hsome_links" ∷ ⌜length σ.(state.links) > 0⌝ ∗
@@ -644,13 +644,15 @@ Proof.
   wp_apply (wp_load_slice_elem with "[$Hsl_epochs]") as "Hsl_epochs"; [word|done|].
 
   simpl in *.
-  iNamed "Hinv_sigpred".
+  iPoseProof "Hinv_sigpred" as "@".
   iDestruct (big_sepL_lookup with "Hlinks") as "@"; [done|].
   rewrite take_ge; [|word].
-  iDestruct (big_sepL2_lookup_1_some with "Hmaps") as %[? ?]; [done|].
+  iDestruct (big_sepL2_length with "Hmaps") as %?.
+  iDestruct (big_sepL2_lookup_1_some with "Hmaps") as %[? Hlast_maps]; [done|].
   iDestruct (big_sepL2_lookup with "Hmaps") as "@"; [done..|].
-  replace (length digs - _ + _)%nat with (pred $ length digs) in Hlook_dig by word.
-  rewrite -last_lookup in Hlook_dig.
+  replace (sint.nat _) with (pred $ length maps) in Hlast_maps by word.
+  replace (_ - _ + _)%nat with (pred $ length digs) in Hlook_dig by word.
+  rewrite -!last_lookup in Hlook_dig, Hlast_maps.
   simplify_eq/=.
   wp_apply (wp_getNextLink (history.mk' digs cut) γ σ) as "* @".
   { simpl. iFrame "#%".
@@ -675,7 +677,62 @@ Proof.
     iApply "Hgenie".
     iNamed "Hgood".
     iFrame "#". }
-Admitted.
+  iNamedSuffix "Hgenie" "_n".
+
+  iPoseProof "Hwish_getNextLink_n" as "H".
+  iNamedSuffix "H" "_n".
+  simpl in *.
+  iDestruct (ktcore.sigpred_links_inv_grow with "Hinv_sigpred His_map_n []") as "{Hinv_sigpred} Hinv_sigpred_n".
+  { naive_solver. }
+  { iExactEq "His_link_n". f_equal. word. }
+  rewrite -ncfupd_wp.
+  iMod "Hfupd" as "(%&Hadtr&Hfupd)".
+  iDestruct (unify_adtr_gs with "Hown_gs_hist Hadtr") as %->.
+  destruct σ.
+  iSpecialize ("Hfupd" $! [link]).
+  simpl in *.
+  iNamedSuffix "Hown_gs_hist" "0".
+  iEval (rewrite /own_Auditor) in "Hadtr".
+  iNamedSuffix "Hadtr" "1".
+  simpl in *.
+  iCombine "Hgs_links0 Hgs_links1" as "Hgs_links".
+  iMod (mono_list_auth_own_update_app [link] with "Hgs_links")
+    as "((Hgs_links0&Hgs_links1)&#Hlb_links)".
+  iMod ("Hfupd" with "Hgs_links1") as "HQ".
+  iModIntro.
+
+  iNamed "Hproof".
+  wp_apply ktcore.wp_SignLink as "* H".
+  { iFrame "Hinv_sigpred_n #".
+    replace (uint.nat _ - uint.nat _)%nat with (length links) by word.
+    by rewrite lookup_snoc. }
+  iNamedSuffix "H" "_my".
+  wp_apply wp_alloc as "* Hstr_epoch_n".
+  iPersist "Hstr_epoch_n".
+  wp_apply wp_slice_literal as "* Hsl_tmp".
+  wp_apply (wp_slice_append with "[$Hsl_epochs $Hcap_epochs $Hsl_tmp]")
+    as "* (Hsl_epochs&Hcap_epochs&_)".
+  iModIntro.
+  rewrite ktcore.rw_BlameNone.
+  iApply "HΦ".
+  iSplit. { iPureIntro. apply ktcore.blame_none. }
+  case_decide; try done.
+  iFrame "∗".
+  iFrame "Hstr_serv #".
+  replace (W64 (_ + (_ + _)%nat)) with ep by word.
+  iFrame "#".
+  simpl in *.
+  iSplit.
+  { iPureIntro.
+    autorewrite with len.
+    exists ep. repeat split; try done; [|word..].
+    by rewrite last_snoc. }
+  case_match; try done.
+  iNamed "Hgood".
+  iDestruct (wish_getNextLink_det with "Hwish_getNextLink Hwish_getNextLink_n") as %?.
+  destruct_and!. simplify_eq/=.
+  iFrame "#".
+Qed.
 
 Lemma wp_Auditor_Update a γ Q :
   {{{
