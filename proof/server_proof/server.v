@@ -84,10 +84,7 @@ Definition state_inv σ : iProp Σ :=
   "%Hpend" ∷ ⌜∀ lastKeys,
     last σ.(state.hist).*2 = Some lastKeys →
     keys_sub lastKeys σ.(state.pending)⌝ ∗
-  "%Hhist" ∷ ⌜∀ i keys0 keys1,
-    σ.(state.hist).*2 !! i = Some keys0 →
-    σ.(state.hist).*2 !! (S i) = Some keys1 →
-    keys_sub keys0 keys1⌝.
+  "%Hhist" ∷ ⌜list_reln σ.(state.hist).*2 keys_sub⌝.
 
 Axiom own_Server : ∀ γ σ, iProp Σ.
 
@@ -299,24 +296,8 @@ Proof.
   - intros ? Hlast.
     rewrite fmap_app last_snoc in Hlast.
     by simplify_eq/=.
-  - intros i ?? Hlook0 Hlook1.
-    apply list_lookup_fmap_Some_1 in Hlook0 as (?&?&Hlook0).
-    apply list_lookup_fmap_Some_1 in Hlook1 as (?&?&Hlook1).
-    simplify_eq/=.
-    apply lookup_lt_Some in Hlook1 as ?.
-    autorewrite with len in *.
-    destruct (decide (S i = length hist)).
-    + rewrite lookup_app_l in Hlook0; [|lia].
-      rewrite lookup_app_r in Hlook1; [|lia].
-      apply list_lookup_singleton_Some in Hlook1 as [_ ?].
-      replace i with (pred (length hist)) in Hlook0 by lia.
-      apply (list_lookup_fmap_Some_2 snd) in Hlook0.
-      replace (length hist) with (length hist.*2) in Hlook0 by len.
-      rewrite -last_lookup in Hlook0.
-      naive_solver.
-    + rewrite !lookup_app_l in Hlook0, Hlook1; [|lia..].
-      apply (list_lookup_fmap_Some_2 snd) in Hlook0, Hlook1.
-      naive_solver.
+  - rewrite fmap_app.
+    by apply list_reln_snoc.
 Qed.
 
 (** specs. *)
