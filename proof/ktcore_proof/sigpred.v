@@ -22,7 +22,7 @@ Section proof.
 Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
 Context `{!pavG Σ}.
 
-Definition sigpred_vrf γ (vrfPk : list w8) :=
+Definition sigpred_vrf γ (vrfPk : list w8) : iProp Σ :=
   "#Hshot" ∷ ghost_var γ.(sigpred_cfg.vrf) (□) vrfPk.
 
 Definition sigpred_vrf_aux γ enc : iProp Σ :=
@@ -45,12 +45,10 @@ Definition sigpred_links_inv (start_ep : w64) links digs cut maps : iProp Σ :=
     ∃ dig,
     "%Hlook_dig" ∷ ⌜digs !! (offset + idx)%nat = Some dig⌝ ∗
     "#His_map" ∷ merkle.is_map m dig) ∗
-  "%Hmono" ∷ ⌜∀ i m0 m1,
-    maps !! i = Some m0 →
-    maps !! (S i) = Some m1 →
-    m0 ⊆ m1⌝.
+  "%Hmono" ∷ ⌜list_reln maps (⊆)⌝.
 
 Definition sigpred_links γ (ep : w64) link : iProp Σ :=
+  (* [links] are all audited. they start from [start_ep]. *)
   ∃ start_ep links digs cut maps,
   (* externalize start_ep so that users agree on the epochs associated with links. *)
   "#Hshot" ∷ ghost_var γ.(sigpred_cfg.start_ep) (□) start_ep ∗
@@ -59,7 +57,6 @@ Definition sigpred_links γ (ep : w64) link : iProp Σ :=
   "#Hinv" ∷ sigpred_links_inv start_ep links digs cut maps.
 
 Definition sigpred_links_aux γ enc : iProp Σ :=
-  (* [links] are all audited. they start from [start_ep]. *)
   ∃ ep link,
   "%Henc" ∷ ⌜enc = ktcore.LinkSig.pure_enc (ktcore.LinkSig.mk' (W8 ktcore.LinkSigTag) ep link)⌝ ∗
   "%Hvalid" ∷ ⌜safemarshal.Slice1D.valid link⌝ ∗
@@ -70,6 +67,47 @@ Definition sigpred γ enc : iProp Σ :=
 
 #[global] Instance sigpred_pers γ e : Persistent (sigpred γ e).
 Proof. apply _. Qed.
+
+Lemma sigpred_links_inv_grow start_ep links link digs dig cut maps m prev_map :
+  last maps = Some prev_map →
+  prev_map ⊆ m →
+  sigpred_links_inv start_ep links digs cut maps -∗
+  hashchain.is_chain (digs ++ [dig]) cut link
+    (uint.nat start_ep + length links + 1)%nat -∗
+  merkle.is_map m dig -∗
+  sigpred_links_inv start_ep (links ++ [link]) (digs ++ [dig]) cut (maps ++ [m]).
+Proof.
+  iIntros (Hlast_map Hsub) "@ #His_link #His_map".
+  rewrite /sigpred_links_inv.
+  autorewrite with len in *.
+  iSplit; [word|].
+  iSplit.
+  { rewrite big_sepL_snoc.
+    iSplit.
+    - iApply (big_sepL_impl with "Hlinks").
+      iIntros "!> *". iIntros (?%lookup_lt_Some). iNamedSuffix 1 "0".
+      iExactEq "His_link0". rewrite /named. f_equal.
+      rewrite take_app_le; [|word].
+      f_equal. word.
+    - simpl. iExactEq "His_link". rewrite /named.
+      f_equal; [|word].
+      rewrite take_ge; [done|len]. }
+  iSplit.
+  { rewrite big_sepL2_snoc.
+    iSplit.
+    - iApply (big_sepL2_impl with "Hmaps").
+      iIntros "!> *". iIntros (?%lookup_lt_Some ?). iNamedSuffix 1 "0".
+      iExists _. iSplit.
+      + rewrite lookup_app_l; [|word].
+        iPureIntro. exact_eq Hlook_dig0. f_equal. word.
+      + done.
+    - iExists _. iSplit.
+      + rewrite lookup_app_r; [|word].
+        rewrite list_lookup_singleton_Some.
+        iPureIntro. split; [|done]. word.
+      + done. }
+  { iPureIntro. apply list_reln_snoc; [done|]. naive_solver. }
+Qed.
 
 End proof.
 End ktcore.
