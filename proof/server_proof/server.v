@@ -370,7 +370,7 @@ Lemma wp_Server_Audit s γ (prevEpoch : w64) Q :
   {{{
     sl_proof err σ, RET (#sl_proof, #err);
     "HQ" ∷ Q σ ∗
-    "#Herr" ∷
+    "Herr" ∷
       match err with
       | true => ⌜uint.nat prevEpoch ≥ length σ.(state.hist)⌝
       | false =>

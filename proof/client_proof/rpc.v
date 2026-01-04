@@ -94,24 +94,24 @@ Proof.
   by replace nextEp with nextEp0 in * by word.
 Qed.
 
-Lemma wp_CallHistory s γ (uid prevEpoch prevVerLen : w64) :
+Lemma wp_CallHistory s good (uid prevEpoch prevVerLen : w64) :
   {{{
     is_pkg_init server ∗
-    "#His_serv" ∷ is_Server_rpc s γ ∗
+    "#His_serv" ∷ is_Server_rpc s good ∗
     (* one recurring pattern in pav is that resources only become available
     under a good flag. so far, i've been able to work around this.
     e.g., here, the caller needs to open invs after knowing good,
     so we add an update under the match. *)
-    "#His_args" ∷ □ match γ with None => True | Some cfg =>
+    "#His_args" ∷ □ match good with None => True | Some γ =>
       |={⊤}=> ∃ (entry : list w8 * keys_ty),
-      "#Hidx_ep" ∷ mono_list_idx_own cfg.(cfg.histγ) (uint.nat prevEpoch) entry ∗
+      "#Hidx_ep" ∷ mono_list_idx_own γ.(cfg.histγ) (uint.nat prevEpoch) entry ∗
       "%Hlt_ver" ∷ ⌜uint.nat prevVerLen ≤ length (entry.2 !!! uid)⌝ end
   }}}
   @! server.CallHistory #s #uid #prevEpoch #prevVerLen
   {{{
     sl_chainProof sl_linkSig sl_hist ptr_bound err,
     RET (#sl_chainProof, #sl_linkSig, #sl_hist, #ptr_bound, #(ktcore.blame_to_u64 err));
-    "%Hblame" ∷ ⌜ktcore.BlameSpec err {[ktcore.BlameServFull:=option_bool γ]}⌝ ∗
+    "%Hblame" ∷ ⌜ktcore.BlameSpec err {[ktcore.BlameServFull:=option_bool good]}⌝ ∗
     "Herr" ∷ (if decide (err ≠ ∅) then True else
       ∃ chainProof linkSig hist bound,
       "#Hsl_chainProof" ∷ sl_chainProof ↦*□ chainProof ∗
@@ -119,29 +119,29 @@ Lemma wp_CallHistory s γ (uid prevEpoch prevVerLen : w64) :
       "#Hsl_hist" ∷ ktcore.MembSlice1D.own sl_hist hist (□) ∗
       "#Hptr_bound" ∷ ktcore.NonMemb.own ptr_bound bound (□) ∗
 
-      "Hgood" ∷ match γ with None => True | Some cfg =>
+      "Hgood" ∷ match good with None => True | Some γ =>
         ∀ prev,
-        epoch.align_serv prev cfg -∗
+        epoch.align_serv prev γ -∗
         ⌜prev.(epoch.epoch) = prevEpoch⌝ -∗
 
         ∃ servHist lastDig lastKeys next,
         let pks := lastKeys !!! uid in
-        "#Hlb_servHist" ∷ mono_list_lb_own cfg.(cfg.histγ) servHist ∗
+        "#Hlb_servHist" ∷ mono_list_lb_own γ.(cfg.histγ) servHist ∗
         "%Hlt_prevEpoch" ∷ ⌜uint.nat prevEpoch < length servHist⌝ ∗
         "%Hlt_prevVer" ∷ ⌜uint.nat prevVerLen ≤ length pks⌝ ∗
         (* TODO: add noof to serv specs and other methods. *)
         "%Hnoof_vers" ∷ ⌜length pks = sint.nat (W64 (length pks))⌝ ∗
         "%Hlast_servHist" ∷ ⌜last servHist = Some (lastDig, lastKeys)⌝ ∗
 
-        "#Hwish_getNextEp" ∷ wish_getNextEp prev cfg.(cfg.sig_pk) chainProof
+        "#Hwish_getNextEp" ∷ wish_getNextEp prev γ.(cfg.sig_pk) chainProof
           linkSig (drop (S (uint.nat prevEpoch)) servHist.*1) next ∗
-        "#Halign_next" ∷ epoch.align_serv next cfg ∗
-        "#Hwish_hist" ∷ ktcore.wish_ListMemb cfg.(cfg.vrf_pk) uid prevVerLen
+        "#Halign_next" ∷ epoch.align_serv next γ ∗
+        "#Hwish_hist" ∷ ktcore.wish_ListMemb γ.(cfg.vrf_pk) uid prevVerLen
           next.(epoch.dig) hist ∗
         "%Heq_hist" ∷ ⌜Forall2
           (λ x y, x = y.(ktcore.Memb.PkOpen).(ktcore.CommitOpen.Val))
           (drop (uint.nat prevVerLen) pks) hist⌝ ∗
-        "#Hwish_bound" ∷ ktcore.wish_NonMemb cfg.(cfg.vrf_pk) uid
+        "#Hwish_bound" ∷ ktcore.wish_NonMemb γ.(cfg.vrf_pk) uid
           (W64 $ length pks) next.(epoch.dig) bound ∗
 
         (* info in pending GS.
@@ -150,7 +150,7 @@ Lemma wp_CallHistory s γ (uid prevEpoch prevVerLen : w64) :
         it's actually pers. *)
         "#Hpend_gs" ∷ (if decide (length pks = 0%nat) then True else
           ∃ uidγ,
-          "%Hlook_uidγ" ∷ ⌜cfg.(cfg.uidγ) !! uid = Some uidγ⌝ ∗
+          "%Hlook_uidγ" ∷ ⌜γ.(cfg.uidγ) !! uid = Some uidγ⌝ ∗
           "#Hidx_pks" ∷ ([∗ list] ver ↦ pk ∈ pks,
             ∃ i,
             mono_list_idx_own uidγ i ((W64 ver), pk))) end)
@@ -228,7 +228,7 @@ Proof.
       iPureIntro. simpl in *.
       word. }
 
-  rewrite ktcore.rw_BlameNone.
+  rewrite /ktcore.BlameNone ktcore.rw_BlameNone.
   iApply "HΦ".
   iApply fupd_sep.
   iSplitR. { iPureIntro. apply ktcore.blame_none. }
