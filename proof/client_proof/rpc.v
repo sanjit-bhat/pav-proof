@@ -121,6 +121,11 @@ Lemma wp_CallHistory s good (uid prevEpoch prevVerLen : w64) :
 
       "Hgood" ∷ match good with None => True | Some γ =>
         ∀ prev,
+        (* this spec takes the form: given aligned prev client state,
+        serv transitions it to aligned next client state.
+        it's useful to have this intermediate bw serv method spec and client
+        bc the client is also involved in the link sig check passing;
+        the link is partially computed from the client's prior link state. *)
         epoch.align_serv prev γ -∗
         ⌜prev.(epoch.epoch) = prevEpoch⌝ -∗
 
