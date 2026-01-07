@@ -326,19 +326,22 @@ Lemma wp_Server_History s γ (uid prevEpoch prevVerLen : w64) Q :
   }}}
   s @ (ptrT.id server.Server.id) @ "History" #uid #prevEpoch #prevVerLen
   {{{
-    sl_chainProof sl_linkSig sl_hist ptr_bound err lastDig lastKeys lastLink σ,
+    sl_chainProof sl_linkSig sl_hist ptr_bound err σ lastDig lastKeys,
     RET (#sl_chainProof, #sl_linkSig, #sl_hist, #ptr_bound, #err);
     let numEps := length σ.(state.hist) in
     let pks := lastKeys !!! uid in
     "HQ" ∷ Q σ ∗
     "%Hlast_hist" ∷ ⌜last σ.(state.hist) = Some (lastDig, lastKeys)⌝ ∗
-    "#His_lastLink" ∷ hashchain.is_chain σ.(state.hist).*1 None lastLink numEps ∗
     "#Herr" ∷
       match err with
-      | true => ⌜uint.nat prevEpoch ≥ length σ.(state.hist) ∨
+      | true => ⌜uint.nat prevEpoch ≥ numEps ∨
         uint.nat prevVerLen > length pks⌝
       | false =>
-        ∃ chainProof linkSig hist bound,
+        ∃ lastLink chainProof linkSig hist bound,
+        "%Hnoof_eps" ∷ ⌜numEps = sint.nat (W64 $ numEps)⌝ ∗
+        "%Hnoof_vers" ∷ ⌜length pks = sint.nat (W64 $ length pks)⌝ ∗
+        "#His_lastLink" ∷ hashchain.is_chain σ.(state.hist).*1 None lastLink numEps ∗
+
         "#Hsl_chainProof" ∷ sl_chainProof ↦*□ chainProof ∗
         "#Hsl_linkSig" ∷ sl_linkSig ↦*□ linkSig ∗
         "#Hsl_hist" ∷ ktcore.MembSlice1D.own sl_hist hist (□) ∗
@@ -368,31 +371,35 @@ Lemma wp_Server_Audit s γ (prevEpoch : w64) Q :
   }}}
   s @ (ptrT.id server.Server.id) @ "Audit" #prevEpoch
   {{{
-    sl_proof err σ, RET (#sl_proof, #err);
+    sl_proofs err σ, RET (#sl_proofs, #err);
+    let numEps := length σ.(state.hist) in
     "HQ" ∷ Q σ ∗
     "Herr" ∷
       match err with
-      | true => ⌜uint.nat prevEpoch ≥ length σ.(state.hist)⌝
+      | true => ⌜uint.nat prevEpoch ≥ numEps⌝
       | false =>
-        ∃ proof,
-        "#Hsl_proof" ∷ ktcore.AuditProofSlice1D.own sl_proof proof (□) ∗
-        "#His_upds" ∷ ([∗ list] i ↦ aud ∈ proof,
+        (* we could explicitly tie down update labels and vals,
+        but callers don't currently need that.
+        this spec still gives the auditor same digs as server,
+        and dig commits to exactly one map. *)
+        ∃ proofs,
+        "%Hnoof_eps" ∷ ⌜numEps = sint.nat (W64 $ numEps)⌝ ∗
+
+        "#Hsl_proofs" ∷ ktcore.AuditProofSlice1D.own sl_proofs proofs (□) ∗
+        "%Hlen_proofs" ∷ ⌜(uint.Z prevEpoch + length proofs + 1)%Z = numEps⌝ ∗
+
+        "#His_upds" ∷ ([∗ list] i ↦ aud ∈ proofs,
           ∃ dig0 dig1,
           let predEp := (uint.nat prevEpoch + i)%nat in
           "%Hlook0" ∷ ⌜σ.(state.hist).*1 !! predEp = Some dig0⌝ ∗
           "%Hlook1" ∷ ⌜σ.(state.hist).*1 !! (S predEp) = Some dig1⌝ ∗
           "#His_upd" ∷ ktcore.wish_ListUpdate dig0 aud.(ktcore.AuditProof.Updates) dig1) ∗
-        "#His_sigs" ∷ ([∗ list] i ↦ aud ∈ proof,
+        "#His_sigs" ∷ ([∗ list] i ↦ aud ∈ proofs,
           ∃ link,
           let ep := (uint.nat prevEpoch + S i)%nat in
           "#His_link" ∷ hashchain.is_chain (take (S ep) σ.(state.hist).*1)
             None link (S ep) ∗
           "#His_sig" ∷ ktcore.wish_LinkSig γ.(cfg.sig_pk) (W64 ep) link aud.(ktcore.AuditProof.LinkSig))
-
-        (* NOTE: no need to explicitly state update labels and vals.
-        those are tied down by UpdateProof, which is tied into server's digs.
-        dig only commits to one map, which lets auditor know it shares
-        same maps as server. *)
       end
   }}}.
 Proof. Admitted.
@@ -406,12 +413,15 @@ Lemma wp_Server_Start s γ Q :
   }}}
   s @ (ptrT.id server.Server.id) @ "Start" #()
   {{{
-    ptr_chain chain ptr_vrf vrf last_link σ, RET (#ptr_chain, #ptr_vrf);
+    ptr_chain chain ptr_vrf vrf σ last_link, RET (#ptr_chain, #ptr_vrf);
+    let numEps := length σ.(state.hist) in
     "HQ" ∷ Q σ ∗
+    "%Hnoof_eps" ∷ ⌜numEps = sint.nat (W64 $ numEps)⌝ ∗
+
     "#Hptr_chain" ∷ StartChain.own ptr_chain chain (□) ∗
     "#Hptr_vrf" ∷ StartVrf.own ptr_vrf vrf (□) ∗
 
-    "%His_PrevEpochLen" ∷ ⌜uint.nat chain.(StartChain.PrevEpochLen) < length σ.(state.hist)⌝ ∗
+    "%His_PrevEpochLen" ∷ ⌜uint.nat chain.(StartChain.PrevEpochLen) < numEps⌝ ∗
     "#His_PrevLink" ∷ hashchain.is_chain
       (take (uint.nat chain.(StartChain.PrevEpochLen)) σ.(state.hist).*1)
       None chain.(StartChain.PrevLink)
@@ -419,9 +429,9 @@ Lemma wp_Server_Start s γ Q :
     "%His_ChainProof" ∷ ⌜hashchain.wish_Proof chain.(StartChain.ChainProof)
       (drop (uint.nat chain.(StartChain.PrevEpochLen)) σ.(state.hist).*1)⌝ ∗
     "#His_last_link" ∷ hashchain.is_chain σ.(state.hist).*1 None
-      last_link (length σ.(state.hist)) ∗
+      last_link numEps ∗
     "#His_LinkSig" ∷ ktcore.wish_LinkSig γ.(cfg.sig_pk)
-      (W64 $ length σ.(state.hist) - 1) last_link chain.(StartChain.LinkSig) ∗
+      (W64 $ numEps - 1) last_link chain.(StartChain.LinkSig) ∗
 
     "%Heq_VrfPk" ∷ ⌜γ.(cfg.vrf_pk) = vrf.(StartVrf.VrfPk)⌝ ∗
     "#His_VrfSig" ∷ ktcore.wish_VrfSig γ.(cfg.sig_pk) γ.(cfg.vrf_pk)

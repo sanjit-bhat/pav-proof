@@ -134,7 +134,6 @@ Lemma wp_CallHistory s good (uid prevEpoch prevVerLen : w64) :
         "#Hlb_servHist" ∷ mono_list_lb_own γ.(cfg.histγ) servHist ∗
         "%Hlt_prevEpoch" ∷ ⌜uint.nat prevEpoch < length servHist⌝ ∗
         "%Hlt_prevVer" ∷ ⌜uint.nat prevVerLen ≤ length pks⌝ ∗
-        (* TODO: add noof to serv specs and other methods. *)
         "%Hnoof_vers" ∷ ⌜length pks = sint.nat (W64 (length pks))⌝ ∗
         "%Hlast_servHist" ∷ ⌜last servHist = Some (lastDig, lastKeys)⌝ ∗
 

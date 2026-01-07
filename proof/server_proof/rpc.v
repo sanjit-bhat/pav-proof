@@ -77,22 +77,24 @@ Lemma wp_History_cli_call (Q : cfg.t → state.t → iProp Σ)
     (("%Herr_serv_dec" ∷ ⌜err1 = true⌝ ∗
       "Hgenie" ∷ ¬ ⌜∃ obj tail, HistoryArg.wish arg obj tail⌝) ∨
 
-    ∃ uid prevEpoch prevVerLen tail lastDig lastKeys lastLink σ,
+    ∃ uid prevEpoch prevVerLen tail σ lastDig lastKeys,
     let numEps := length σ.(state.hist) in
     let pks := lastKeys !!! uid in
     "%Hdec" ∷ ⌜HistoryArg.wish arg
       (HistoryArg.mk' uid prevEpoch prevVerLen) tail⌝ ∗
     "HQ" ∷ Q γ σ ∗
-    "%Hnoof_epochs" ∷ ⌜numEps = sint.nat (W64 numEps)⌝ ∗
-    "%Hnoof_vers" ∷ ⌜length pks = sint.nat (W64 (length pks))⌝ ∗
     "%Hlast_hist" ∷ ⌜last σ.(state.hist) = Some (lastDig, lastKeys)⌝ ∗
-    "#His_lastLink" ∷ hashchain.is_chain σ.(state.hist).*1 None lastLink numEps ∗
 
     "#Herr_serv_args" ∷
       match err1 with
-      | true => ⌜uint.nat prevEpoch ≥ length σ.(state.hist) ∨
+      | true => ⌜uint.nat prevEpoch ≥ numEps ∨
         uint.nat prevVerLen > length pks⌝
       | false =>
+        ∃ lastLink,
+        "%Hnoof_epochs" ∷ ⌜numEps = sint.nat (W64 numEps)⌝ ∗
+        "%Hnoof_vers" ∷ ⌜length pks = sint.nat (W64 (length pks))⌝ ∗
+        "#His_lastLink" ∷ hashchain.is_chain σ.(state.hist).*1 None lastLink numEps ∗
+
         "%Hwish_chainProof" ∷ ⌜hashchain.wish_Proof chainProof
           (drop (S (uint.nat prevEpoch)) σ.(state.hist).*1)⌝ ∗
         "#Hwish_linkSig" ∷ ktcore.wish_LinkSig γ.(cfg.sig_pk)
@@ -129,68 +131,36 @@ Lemma wp_Audit_cli_call (Q : cfg.t → state.t → iProp Σ)
     "Hsl_reply" ∷ sl_reply ↦* replyB ∗
 
     "Hgood" ∷ match good with None => True | Some γ =>
-    ∃ proof err1,
-    "%His_reply" ∷ ⌜AuditReply.wish replyB (AuditReply.mk' proof err1) []⌝ ∗
+    ∃ proofs err1,
+    "%His_reply" ∷ ⌜AuditReply.wish replyB (AuditReply.mk' proofs err1) []⌝ ∗
 
     (("%Herr_serv_dec" ∷ ⌜err1 = true⌝ ∗
       "Hgenie" ∷ ¬ ⌜∃ obj tail, AuditArg.wish arg obj tail⌝) ∨
 
     ∃ prevEpoch tail σ,
+    let numEps := length σ.(state.hist) in
     "%Hdec" ∷ ⌜AuditArg.wish arg (AuditArg.mk' prevEpoch) tail⌝ ∗
     "HQ" ∷ Q γ σ ∗
     "Herr" ∷
       match err1 with
       | true => ⌜uint.nat prevEpoch ≥ length σ.(state.hist)⌝
       | false =>
-        "#His_upds" ∷ ([∗ list] i ↦ aud ∈ proof,
+        "%Hnoof_eps" ∷ ⌜numEps = sint.nat (W64 $ numEps)⌝ ∗
+        "%Hlen_proofs" ∷ ⌜(uint.Z prevEpoch + length proofs + 1)%Z = numEps⌝ ∗
+
+        "#His_upds" ∷ ([∗ list] i ↦ aud ∈ proofs,
           ∃ dig0 dig1,
           let predEp := (uint.nat prevEpoch + i)%nat in
           "%Hlook0" ∷ ⌜σ.(state.hist).*1 !! predEp = Some dig0⌝ ∗
           "%Hlook1" ∷ ⌜σ.(state.hist).*1 !! (S predEp) = Some dig1⌝ ∗
           "#His_upd" ∷ ktcore.wish_ListUpdate dig0 aud.(ktcore.AuditProof.Updates) dig1) ∗
-        "#His_sigs" ∷ ([∗ list] i ↦ aud ∈ proof,
+        "#His_sigs" ∷ ([∗ list] i ↦ aud ∈ proofs,
           ∃ link,
           let ep := (uint.nat prevEpoch + S i)%nat in
           "#His_link" ∷ hashchain.is_chain (take (S ep) σ.(state.hist).*1)
             None link (S ep) ∗
           "#His_sig" ∷ ktcore.wish_LinkSig γ.(cfg.sig_pk) (W64 ep) link aud.(ktcore.AuditProof.LinkSig))
       end) end end
-  }}}.
-Proof. Admitted.
-
-Lemma wp_CallStart s good :
-  {{{
-    is_pkg_init server ∗
-    "#His_serv" ∷ is_Server_rpc s good
-  }}}
-  @! server.CallStart #s
-  {{{
-    ptr_chain ptr_vrf err, RET (#ptr_chain, #ptr_vrf, #(ktcore.blame_to_u64 err));
-    "%Hblame" ∷ ⌜ktcore.BlameSpec err {[ktcore.BlameServFull:=option_bool good]}⌝ ∗
-    "Herr" ∷ (if decide (err ≠ ∅) then True else
-      ∃ chain vrf,
-      "#Hptr_chain" ∷ StartChain.own ptr_chain chain (□) ∗
-      "#Hptr_vrf" ∷ StartVrf.own ptr_vrf vrf (□) ∗
-
-      "Hgood" ∷ match good with None => True | Some γ =>
-        ∃ servHist last_link,
-        "#Hlb_servHist" ∷ mono_list_lb_own γ.(cfg.histγ) servHist ∗
-
-        "%His_PrevEpochLen" ∷ ⌜uint.nat chain.(StartChain.PrevEpochLen) < length servHist⌝ ∗
-        "#His_PrevLink" ∷ hashchain.is_chain
-          (take (uint.nat chain.(StartChain.PrevEpochLen)) servHist.*1)
-          None chain.(StartChain.PrevLink)
-          (uint.nat chain.(StartChain.PrevEpochLen)) ∗
-        "%His_ChainProof" ∷ ⌜hashchain.wish_Proof chain.(StartChain.ChainProof)
-          (drop (uint.nat chain.(StartChain.PrevEpochLen)) servHist.*1)⌝ ∗
-        "#His_last_link" ∷ hashchain.is_chain servHist.*1 None
-          last_link (length servHist) ∗
-        "#His_LinkSig" ∷ ktcore.wish_LinkSig γ.(cfg.sig_pk)
-          (W64 $ length servHist - 1) last_link chain.(StartChain.LinkSig) ∗
-
-        "%Heq_VrfPk" ∷ ⌜γ.(cfg.vrf_pk) = vrf.(StartVrf.VrfPk)⌝ ∗
-        "#His_VrfSig" ∷ ktcore.wish_VrfSig γ.(cfg.sig_pk) γ.(cfg.vrf_pk)
-          vrf.(StartVrf.VrfSig) end)
   }}}.
 Proof. Admitted.
 
