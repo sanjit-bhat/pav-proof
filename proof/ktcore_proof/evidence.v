@@ -126,6 +126,9 @@ Proof.
     list_simplifier.
     intuition.
     by f_equal. }
+  rewrite /sigpred_vrf.
+  iNamedSuffix "Hsigpred0" "0".
+  iNamedSuffix "Hsigpred1" "1".
   iCombine "Hshot0 Hshot1" gives %[_ <-].
   simplify_eq/=.
 Qed.
@@ -204,6 +207,9 @@ Proof.
     intuition.
     by f_equal. }
   simplify_eq/=.
+  rewrite /sigpred_links.
+  iNamedSuffix "Hsigpred0" "0".
+  iNamedSuffix "Hsigpred1" "1".
   iCombine "Hshot0 Hshot1" gives %[_ <-].
   iDestruct (mono_list_idx_own_get with "Hlb0") as "Hidx0"; [done|].
   iDestruct (mono_list_idx_own_get with "Hlb1") as "Hidx1"; [done|].

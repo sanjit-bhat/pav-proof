@@ -7,7 +7,7 @@ From New.proof.github_com.sanjit_bhat.pav Require Import
   advrpc auditor cryptoffi hashchain ktcore merkle server.
 
 From New.proof.github_com.sanjit_bhat.pav.client_proof Require Import
-  rpc.
+  base rpc.
 
 Module client.
 Import rpc.client.
@@ -91,7 +91,7 @@ Definition own ptr obj : iProp Σ :=
 
   "#His_sigPk" ∷ match obj.(good) with None => True | Some cfg =>
     cryptoffi.is_sig_pk obj.(info).(servInfo.sig_pk)
-      (ktcore.sigpred_pred cfg.(server.cfg.sigpredγ)) end ∗
+      (ktcore.sigpred cfg.(server.cfg.sigpredγ)) end ∗
   (* trusted. *)
   "%Heq_sig_pk" ∷ ⌜match obj.(good) with None => True | Some cfg =>
     obj.(info).(servInfo.sig_pk) = cfg.(server.cfg.sig_pk) end⌝ ∗
