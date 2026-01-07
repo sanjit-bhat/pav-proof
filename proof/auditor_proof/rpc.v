@@ -132,17 +132,15 @@ Lemma wp_CallAudit s good (prevEpoch : w64) :
   {{{
     sl_proofs err, RET (#sl_proofs, #(ktcore.blame_to_u64 err));
     "%Hblame" ∷ ⌜ktcore.BlameSpec err {[ktcore.BlameServFull:=option_bool good]}⌝ ∗
-    "Herr" ∷ (if decide (err ≠ ∅) then True else
+    "#Herr" ∷ (if decide (err ≠ ∅) then True else
       ∃ proofs,
       "#Hsl_proofs" ∷ ktcore.AuditProofSlice1D.own sl_proofs proofs (□) ∗
 
       "Hgood" ∷ match good with None => True | Some γ =>
-        "%Hnoof_eps" ∷ ⌜let numEps := (uint.Z prevEpoch + length proofs + 1)%Z in
-          numEps = sint.nat (W64 $ numEps)⌝ ∗
         (* writing determ trans per epoch makes postcond easier to use
         than one trans across all epochs. epochs are indep. *)
-        "Hproofs" ∷ ([∗ list] idx ↦ proof ∈ proofs,
-          ∀ adtr_hist adtrσ,
+        ([∗ list] idx ↦ proof ∈ proofs,
+          □ ∀ adtr_hist adtrσ,
           history.align_serv adtr_hist adtrσ γ -∗
           ⌜uint.Z adtrσ.(state.start_ep) + length adtrσ.(state.links) - 1 =
             (uint.Z prevEpoch + idx)%Z⌝ -∗
@@ -223,10 +221,9 @@ Proof.
   iDestruct "HQ" as "[#Hnew_hist %]".
   iNamed "Herr".
 
-  iSplit; [word|].
   iClear "His_args".
   iApply big_sepL_intro.
-  iModIntro. iIntros (?? Hlook_proofs ??) "@ %".
+  iModIntro. iIntros (?? Hlook_proofs) "!> * @ %".
   rewrite /wish_getNextLink /history.align_serv.
   destruct adtr_hist, σ. simplify_eq/=.
   iDestruct (big_sepL_lookup with "His_upds") as "{His_upds} @"; [done|].

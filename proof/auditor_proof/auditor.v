@@ -6,14 +6,14 @@ From New.proof.github_com.sanjit_bhat.pav Require Import
   advrpc cryptoffi hashchain ktcore merkle server.
 
 From New.proof.github_com.sanjit_bhat.pav.auditor_proof Require Import
-  base serde.
+  base rpc serde.
 
 (* TODO: bad New.proof.sync exports.
 https://github.com/mit-pdos/perennial/issues/470 *)
 From New.proof.github_com.sanjit_bhat.pav Require Import prelude.
 
 Module auditor.
-Import base.auditor serde.auditor.
+Import base.auditor rpc.auditor serde.auditor.
 
 Module serv.
 Section proof.
@@ -64,19 +64,19 @@ Definition own ptr obj γ σ q : iProp Σ :=
 
   "Hown_hist" ∷ history.own ptr_hist obj.(hist) γ σ q ∗
   "Hown_gs_hist" ∷ history.own_gs γ σ q ∗
-  "#Hinv_sigpred" ∷ ktcore.sigpred_links_inv γ.(cfg.start_ep) σ.(state.links)
+  "#Hinv_sigpred" ∷ ktcore.sigpred_links_inv σ.(state.start_ep) σ.(state.links)
     obj.(hist).(history.digs) obj.(hist).(history.cut) maps ∗
   "#Halign_hist" ∷ match γ.(cfg.serv_good) with None => True | Some servγ =>
-    history.align_serv obj.(hist) γ σ servγ end ∗
+    history.align_serv obj.(hist) σ servγ end ∗
 
   "#Hown_serv" ∷ serv.own ptr_serv γ γ.(cfg.serv_good) ∗
   "#Halign_serv" ∷ match γ.(cfg.serv_good) with None => True | Some servγ =>
     serv.align_serv γ servγ end.
 
 Definition lock_perm ptr γ : iProp Σ :=
-  ∃ ptr_mu adtr σ,
+  ∃ ptr_mu,
   "#Hfld_mu" ∷ ptr ↦s[auditor.Auditor::"mu"]□ ptr_mu ∗
-  "Hperm" ∷ own_RWMutex ptr_mu (own ptr adtr γ σ).
+  "Hperm" ∷ own_RWMutex ptr_mu (λ q, ∃ adtr σ, own ptr adtr γ σ q).
 
 End proof.
 End Auditor.
@@ -326,7 +326,7 @@ Lemma wp_getNextLink hist γ σ sl_sigPk (prevEp : w64) sl_prevDig prevDig
     "#Hsl_prevLink" ∷ sl_prevLink ↦*□ prevLink ∗
     "#Hproof" ∷ ktcore.AuditProof.own ptr_p proof (□) ∗
 
-    "%Heq_prevEp" ∷ ⌜uint.Z prevEp = uint.Z γ.(cfg.start_ep) +
+    "%Heq_prevEp" ∷ ⌜uint.Z prevEp = uint.Z σ.(state.start_ep) +
       length σ.(state.links) - 1⌝ ∗
     "%Heq_prevDig" ∷ ⌜last hist.(history.digs) = Some prevDig⌝ ∗
     "#His_prevLink" ∷ hashchain.is_chain hist.(history.digs)
@@ -338,12 +338,12 @@ Lemma wp_getNextLink hist γ σ sl_sigPk (prevEp : w64) sl_prevDig prevDig
     ep sl_dig sl_link err, RET (#ep, #sl_dig, #sl_link, #err);
     "Hgenie" ∷
       match err with
-      | true => ¬ ∃ ep dig link, wish_getNextLink hist γ σ proof ep dig link
+      | true => ¬ ∃ ep dig link, wish_getNextLink γ.(cfg.serv_sig_pk) hist σ proof ep dig link
       | false =>
         ∃ dig link map,
         "#Hsl_dig" ∷ sl_dig ↦*□ dig ∗
         "#Hsl_link" ∷ sl_link ↦*□ link ∗
-        "#Hwish_getNextLink" ∷ wish_getNextLink hist γ σ proof ep dig link ∗
+        "#Hwish_getNextLink" ∷ wish_getNextLink γ.(cfg.serv_sig_pk) hist σ proof ep dig link ∗
         "#His_map" ∷ merkle.is_map map dig ∗
         "%Hsub" ∷ ⌜prevMap ⊆ map⌝
       end
@@ -390,7 +390,9 @@ Definition wish_SignedVrf servPk adtrPk vrf : iProp Σ :=
   "#Hwish_serv_sig" ∷ ktcore.wish_VrfSig servPk
     vrf.(SignedVrf.VrfPk) vrf.(SignedVrf.ServSig).
 
-Definition own_Auditor γ σ :=
+Definition own_Auditor γ σ : iProp Σ :=
+  "#Hgs_start_ep" ∷ ghost_var γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.start_ep)
+    (□) σ.(state.start_ep) ∗
   (* other 1/2 in lock inv. *)
   "Hgs_links" ∷ mono_list_auth_own γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.links)
     (1/2) σ.(state.links).
@@ -405,6 +407,7 @@ Proof.
   rewrite /own_Auditor.
   iNamedSuffix 1 "0".
   iNamedSuffix 1 "1".
+  iDestruct (ghost_var_agree with "Hgs_start_ep0 Hgs_start_ep1") as %?.
   iDestruct (mono_list_auth_own_agree with "Hgs_links0 Hgs_links1") as %[_ ?].
   destruct σ, σ'.
   by simplify_eq/=.
@@ -424,8 +427,8 @@ Lemma wp_Auditor_Get a γ epoch Q :
     "HQ" ∷ Q σ ∗
     "#Herr" ∷
       match err with
-      | true => ⌜uint.Z epoch < uint.Z γ.(cfg.start_ep) ∨
-        uint.Z epoch >= uint.Z γ.(cfg.start_ep) + length σ.(state.links)⌝
+      | true => ⌜uint.Z epoch < uint.Z σ.(state.start_ep) ∨
+        uint.Z epoch >= uint.Z σ.(state.start_ep) + length σ.(state.links)⌝
       | false =>
         ∃ link vrf,
         "#Hown_link" ∷ SignedLink.own ptr_link link (□) ∗
@@ -433,7 +436,7 @@ Lemma wp_Auditor_Get a γ epoch Q :
         "#Hwish_link" ∷ wish_SignedLink γ.(cfg.serv_sig_pk) γ.(cfg.adtr_sig_pk) epoch link ∗
         "#Hwish_vrf" ∷ wish_SignedVrf γ.(cfg.serv_sig_pk) γ.(cfg.adtr_sig_pk) vrf ∗
         "%Hlook_link" ∷ ⌜σ.(state.links) !!
-          (uint.nat epoch - uint.nat γ.(cfg.start_ep))%nat =
+          (uint.nat epoch - uint.nat σ.(state.start_ep))%nat =
           Some link.(SignedLink.Link)⌝ ∗
         "%Heq_vrf" ∷ ⌜vrf.(SignedVrf.VrfPk) = γ.(cfg.vrf_pk)⌝
       end
@@ -468,7 +471,7 @@ Proof.
 
   simpl in *.
   wp_pure; [word|].
-  list_elem σ.(state.links) (sint.nat (word.sub epoch γ.(cfg.start_ep))) as link.
+  list_elem σ.(state.links) (sint.nat (word.sub epoch σ.(state.start_ep))) as link.
   iDestruct (big_sepL2_lookup_2_some with "Hepochs") as %[? ?]; [done|].
   iDestruct (big_sepL2_lookup with "Hepochs") as "@"; [done..|].
   iNamed "Hown_serv".
@@ -499,13 +502,12 @@ Lemma wp_Auditor_updOnce ptr_a a γ σ Q ptr_proof proof :
 
     "#Hproof" ∷ ktcore.AuditProof.own ptr_proof proof (□) ∗
     "Hgood" ∷ match γ.(cfg.serv_good) with None => True | Some servγ =>
-      ∀ prev_hist prev_γ prev_σ,
-      history.align_serv prev_hist prev_γ prev_σ servγ -∗
       ∃ ep dig link,
-      let hist' := set history.digs (.++ [dig]) prev_hist in
-      let σ' := set state.links (.++ [link]) prev_σ in
-      "#Hwish_getNextLink" ∷ wish_getNextLink prev_hist prev_γ prev_σ proof ep dig link ∗
-      "#Halign_next" ∷ history.align_serv hist' prev_γ σ' servγ end
+      let hist' := set history.digs (.++ [dig]) a.(Auditor.hist) in
+      let σ' := set state.links (.++ [link]) σ in
+      "#Hwish_getNextLink" ∷ wish_getNextLink γ.(cfg.serv_sig_pk)
+        a.(Auditor.hist) σ proof ep dig link ∗
+      "#Halign_next" ∷ history.align_serv hist' σ' servγ end
   }}}
   ptr_a @ (ptrT.id auditor.Auditor.id) @ "updOnce" #ptr_proof
   {{{
@@ -525,7 +527,7 @@ Lemma wp_Auditor_updOnce ptr_a a γ σ Q ptr_proof proof :
         "Hadtr" ∷ Auditor.own ptr_a a' γ σ' 1 ∗
         "HQ" ∷ Q σ')
   }}}.
-Proof. Admitted. (*
+Proof.
   wp_start as "@".
   iNamed "Hadtr". iNamed "Hown_hist". iNamed "Hown_serv". wp_auto.
   destruct a, hist. simpl in *.
@@ -593,7 +595,7 @@ Proof. Admitted. (*
   iCombine "Hgs_links0 Hgs_links1" as "Hgs_links".
   iMod (mono_list_auth_own_update_app [link] with "Hgs_links")
     as "((Hgs_links0&Hgs_links1)&#Hlb_links)".
-  iMod ("Hfupd" with "Hgs_links1") as "HQ".
+  iMod ("Hfupd" with "[$Hgs_links1 //]") as "HQ".
   iModIntro.
 
   iNamed "Hproof".
@@ -614,6 +616,7 @@ Proof. Admitted. (*
   case_decide; try done.
   iFrame "∗".
   iFrame "Hstr_serv #".
+  simpl in *.
   replace (W64 (_ + (_ + _)%nat)) with ep by word.
   iFrame "#".
   simpl in *.
@@ -628,12 +631,11 @@ Proof. Admitted. (*
   destruct_and!. simplify_eq/=.
   iFrame "#".
 Qed.
-*)
 
-Lemma wp_Auditor_Update a γ Q :
+Lemma wp_Auditor_Update ptr_a γ Q :
   {{{
     is_pkg_init auditor ∗
-    "Hlock" ∷ Auditor.lock_perm a γ ∗
+    "Hlock" ∷ Auditor.lock_perm ptr_a γ ∗
     (* pers fupd so that Auditor can add mult links,
     or even run Update as a background thread. *)
     "#Hfupd" ∷ □ (|={⊤,∅}=> ∃ σ, own_Auditor γ σ ∗
@@ -641,15 +643,121 @@ Lemma wp_Auditor_Update a γ Q :
       let σ' := set state.links (.++ new_links) σ in
       own_Auditor γ σ' ={∅,⊤}=∗ Q σ'))
   }}}
-  a @ (ptrT.id auditor.Auditor.id) @ "Update" #()
+  ptr_a @ (ptrT.id auditor.Auditor.id) @ "Update" #()
   {{{
     err σ, RET #(ktcore.blame_to_u64 err);
-    "Hlock" ∷ Auditor.lock_perm a γ ∗
+    "Hlock" ∷ Auditor.lock_perm ptr_a γ ∗
     "%Hblame" ∷ ⌜ktcore.BlameSpec err
       {[ktcore.BlameServFull:=option_bool γ.(cfg.serv_good)]}⌝ ∗
     "HQ" ∷ Q σ
   }}}.
-Proof. Admitted.
+Proof.
+  wp_start as "@".
+  iNamed "Hlock".
+  wp_apply wp_with_defer as "* Hdefer".
+  (* TODO(goose): wp_with_defer adds [subst] expr.
+  [wp_auto] should probably simpl. *)
+  simpl. wp_auto.
+  wp_apply (wp_RWMutex__Lock with "[$Hperm]") as "[Hlocked H]".
+  iNamed "H". iNamed "Hown_hist". iNamed "Hown_serv". wp_auto.
+  iDestruct (own_slice_len with "Hsl_epochs") as %[? ?].
+  iDestruct (big_sepL2_length with "Hepochs") as %?.
+  wp_apply wp_CallAudit as "* @".
+  { iFrame "#".
+    case_match; try done.
+    iNamed "Halign_hist".
+    remember (uint.nat (word.sub _ _)) as ep.
+    list_elem hist ep as e.
+    iDestruct (mono_list_idx_own_get with "His_hist") as "Hidx"; [done|].
+    iFrame "#". }
+  rewrite -ncfupd_wp.
+  iPoseProof "Hfupd" as "H".
+  iMod "H" as "(%&Hadtr&Hclose)".
+  iDestruct (unify_adtr_gs with "Hown_gs_hist Hadtr") as %->.
+  destruct σ.
+  iSpecialize ("Hclose" $! []).
+  list_simplifier.
+  iMod ("Hclose" with "Hadtr") as "HQ".
+  iModIntro.
+  case_bool_decide as Heq_err; wp_auto;
+    rewrite ktcore.rw_Blame0 in Heq_err; subst.
+  2: {
+    wp_apply (wp_RWMutex__Unlock with "[-HΦ HQ]") as "Hlock".
+    { iFrame "∗∗ Hstr_serv #%". }
+    iApply "HΦ".
+    iFrame "∗#%". }
+  case_decide; try done.
+  iNamed "Herr".
+
+  iPersist "Hdefer a upd".
+  iAssert (
+    ∃ (i : w64) (a0 : loc) a σ,
+    "i" ∷ i_ptr ↦ i ∗
+    "p" ∷ p_ptr ↦ a0 ∗
+    "%Hlt_i" ∷ ⌜0 ≤ sint.Z i ≤ length proofs⌝ ∗
+    "err" ∷ err_ptr ↦ ktcore.blame_to_u64 ∅ ∗
+
+    "HΦ" ∷ (∀ (err : ktcore.Blame) (σ0 : state.t),
+             "Hlock" ∷ Auditor.lock_perm ptr_a γ ∗
+             "%Hblame"
+             ∷ ⌜ktcore.BlameSpec err
+                  {[ktcore.BlameServFull := option_bool γ.(cfg.serv_good)]}⌝ ∗
+             "HQ" ∷ Q σ0 -∗ Φ (# (ktcore.blame_to_u64 err))) ∗
+    "Hlocked" ∷ own_RWMutex_Locked ptr_mu
+                  (λ q : Qp,
+                     ∃ (adtr0 : Auditor.t) (σ0 : state.t),
+                       Auditor.own ptr_a adtr0 γ σ0 q) ∗
+
+    "Hadtr" ∷ Auditor.own ptr_a a γ σ 1 ∗
+    "%Heq_ep" ∷ ⌜(uint.Z start_ep + length links + sint.nat i =
+      uint.Z σ.(state.start_ep) + length σ.(state.links))%Z⌝ ∗
+    "HQ" ∷ Q σ
+  )%I with "[-]" as "IH".
+  { iFrame "∗ Hstr_serv #%". simpl. word. }
+  wp_for "IH".
+  wp_if_destruct.
+  2: {
+    wp_apply (wp_RWMutex__Unlock with "[-HΦ HQ]") as "Hlock".
+    { iFrame "∗ Hadtr". }
+    iApply "HΦ".
+    iFrame "∗#%". }
+
+  iClear "HQ".
+  iDestruct "Hsl_proofs" as "(%&Hsl0_proofs&Hsl_proofs)".
+  iDestruct (own_slice_len with "Hsl0_proofs") as %[? ?].
+  iDestruct (big_sepL2_length with "Hsl_proofs") as %?.
+  list_elem proofs (sint.nat i) as proof.
+  iDestruct (big_sepL2_lookup_2_some with "Hsl_proofs") as %[? ?]; [done|].
+  iDestruct (big_sepL2_lookup with "Hsl_proofs") as "Hproof"; [done..|].
+  wp_pure; [word|].
+  wp_apply wp_load_slice_elem as "_"; [word|..].
+  { by iFrame "#". }
+  iNamedSuffix "Hadtr" "0".
+  wp_apply (wp_Auditor_updOnce with "[Hfld_hist0 Hown_hist0 Hown_gs_hist0]") as "* @".
+  { iFrame "∗ Hown_serv0 #%".
+    case_match; try done.
+    iDestruct (big_sepL_lookup with "Hgood") as "{Hgood} Htrans"; [done|].
+    iDestruct ("Htrans" with "Halign_hist0 []") as "{Htrans} @"; [word|].
+    iNamed "Halign_serv0".
+    rewrite Heq_sig_pk.
+    iFrame "#". }
+  case_bool_decide as Heq_err; wp_auto;
+    rewrite ktcore.rw_Blame0 in Heq_err; subst.
+  2: {
+    case_decide; try done.
+    iNamed "Herr".
+    wp_for_post.
+    wp_apply (wp_RWMutex__Unlock with "[-HΦ HQ]") as "Hlock".
+    { iFrame "∗ Hadtr". }
+    iApply "HΦ".
+    iFrame "∗#%". }
+  case_decide; try done.
+  iNamed "Herr".
+  wp_for_post.
+  iFrame.
+  simpl.
+  len.
+Qed.
 
 End proof.
 End auditor.
