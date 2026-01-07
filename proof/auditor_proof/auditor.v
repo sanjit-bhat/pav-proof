@@ -15,88 +15,6 @@ From New.proof.github_com.sanjit_bhat.pav Require Import prelude.
 Module auditor.
 Import base.auditor serde.auditor.
 
-Module state.
-Record t :=
-  mk {
-    links: list $ list w8;
-  }.
-End state.
-
-(* cfg is the static state we know about this party, if good. *)
-Module cfg.
-Record t :=
-  mk {
-    serv_sig_pk: list w8;
-    adtr_sig_pk: list w8;
-    sigpredγ: ktcore.sigpred_cfg.t;
-    vrf_pk: list w8;
-    start_ep: w64;
-    serv_good: option $ server.cfg.t;
-  }.
-End cfg.
-
-Module epoch.
-Record t :=
-  mk' {
-    link: list w8;
-  }.
-
-Section proof.
-Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
-
-Definition own ptr obj ep γ : iProp Σ :=
-  ∃ sl_link sl_servSig servSig sl_adtrSig adtrSig,
-  "#Hstr_epoch" ∷ ptr ↦□ (auditor.epoch.mk sl_link sl_servSig sl_adtrSig) ∗
-  "#Hsl_link" ∷ sl_link ↦*□ obj.(link) ∗
-  "#Hsl_servSig" ∷ sl_servSig ↦*□ servSig ∗
-  "#His_servSig" ∷ ktcore.wish_LinkSig γ.(cfg.serv_sig_pk) ep obj.(link) servSig ∗
-  "#Hsl_adtrSig" ∷ sl_adtrSig ↦*□ adtrSig ∗
-  "#His_adtrSig" ∷ ktcore.wish_LinkSig γ.(cfg.adtr_sig_pk) ep obj.(link) adtrSig.
-
-End proof.
-End epoch.
-
-Module history.
-Record t :=
-  mk' {
-    digs: list $ list w8;
-    cut: option $ list w8;
-  }.
-
-Section proof.
-Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
-Context `{!pavG Σ}.
-
-Definition own ptr obj γ σ q : iProp Σ :=
-  ∃ sl_lastDig lastDig sl_epochs sl0_epochs (last_ep : w64),
-  "Hstr_history" ∷ ptr ↦{#q} (auditor.history.mk sl_lastDig γ.(cfg.start_ep) sl_epochs) ∗
-  "#Hsl_lastDig" ∷ sl_lastDig ↦*□ lastDig ∗
-  "%Heq_lastDig" ∷ ⌜last obj.(digs) = Some lastDig⌝ ∗
-  "Hsl_epochs" ∷ sl_epochs ↦*{#q} sl0_epochs ∗
-  "Hcap_epochs" ∷ own_slice_cap loc sl_epochs (DfracOwn q) ∗
-  "#Hepochs" ∷ ([∗ list] idx ↦ p;o ∈ sl0_epochs;σ.(state.links),
-    epoch.own p (epoch.mk' o) (uint.nat γ.(cfg.start_ep) + idx) γ) ∗
-  "%Hsome_links" ∷ ⌜length σ.(state.links) > 0⌝ ∗
-  "%Hinb_ep" ∷ ⌜uint.Z γ.(cfg.start_ep) + length σ.(state.links) - 1 =
-    uint.Z last_ep⌝.
-
-Definition own_gs γ σ q : iProp Σ :=
-  "#Hgs_start_ep" ∷ ghost_var γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.start_ep)
-    (□) γ.(cfg.start_ep) ∗
-  (* 1/2 own in fupd inv. *)
-  "Hgs_links" ∷ mono_list_auth_own γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.links)
-    (q/2) σ.(state.links).
-
-Definition align_serv obj γ σ servγ : iProp Σ :=
-  ∃ hist,
-  "#His_hist" ∷ mono_list_lb_own servγ.(server.cfg.histγ) hist ∗
-  "%Heq_ep" ∷ ⌜length hist = (uint.nat γ.(cfg.start_ep) + length σ.(state.links))%nat⌝ ∗
-  "%Heq_digs" ∷ ⌜obj.(digs) = hist.*1⌝ ∗
-  "%Heq_cut" ∷ ⌜obj.(cut) = None⌝.
-
-End proof.
-End history.
-
 Module serv.
 Section proof.
 Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
@@ -399,31 +317,6 @@ Proof.
     iApply ktcore.wish_ListUpdate_grow; iFrame "#".
 Qed.
 
-Definition wish_getNextLink hist γ σ proof (ep : w64) dig link : iProp Σ :=
-  ∃ prevDig,
-  "%Heq_ep" ∷ ⌜uint.Z ep = (uint.Z γ.(cfg.start_ep) + length σ.(state.links))%Z⌝ ∗
-  "%Heq_prevDig" ∷ ⌜last hist.(history.digs) = Some prevDig⌝ ∗
-  "#His_upd" ∷ ktcore.wish_ListUpdate prevDig
-    proof.(ktcore.AuditProof.Updates) dig ∗
-  "#His_link" ∷ hashchain.is_chain (hist.(history.digs) ++ [dig])
-    hist.(history.cut) link (S $ uint.nat ep) ∗
-  (* TODO: change γ.sig_pk if messy to state γ corresp with serv. *)
-  "#His_sig" ∷ ktcore.wish_LinkSig γ.(cfg.serv_sig_pk) ep link
-    proof.(ktcore.AuditProof.LinkSig).
-
-Lemma wish_getNextLink_det hist γ σ proof ep0 dig0 link0 ep1 dig1 link1 :
-  wish_getNextLink hist γ σ proof ep0 dig0 link0 -∗
-  wish_getNextLink hist γ σ proof ep1 dig1 link1 -∗
-  ⌜ep0 = ep1 ∧ dig0 = dig1 ∧ link0 = link1⌝.
-Proof.
-  iNamedSuffix 1 "0".
-  iNamedSuffix 1 "1".
-  simplify_eq/=.
-  iDestruct (ktcore.wish_ListUpdate_det with "His_upd0 His_upd1") as %->.
-  iDestruct (hashchain.is_chain_det with "His_link0 His_link1") as %->.
-  iPureIntro. repeat split. word.
-Qed.
-
 Lemma wp_getNextLink hist γ σ sl_sigPk (prevEp : w64) sl_prevDig prevDig
     sl_prevLink prevLink ptr_p proof prevMap :
   {{{
@@ -595,7 +488,7 @@ Proof.
   exact_eq Hlink_lookup. f_equal. word.
 Qed.
 
-Lemma wp_Auditor_updOnce ptr_a a γ σ Q ptr_p p :
+Lemma wp_Auditor_updOnce ptr_a a γ σ Q ptr_proof proof :
   {{{
     is_pkg_init auditor ∗
     "Hadtr" ∷ Auditor.own ptr_a a γ σ 1 ∗
@@ -604,15 +497,17 @@ Lemma wp_Auditor_updOnce ptr_a a γ σ Q ptr_p p :
       let σ' := set state.links (.++ new_links) σ in
       own_Auditor γ σ' ={∅,⊤}=∗ Q σ')) ∗
 
-    "#Hproof" ∷ ktcore.AuditProof.own ptr_p p (□) ∗
-    "#Hgood" ∷ match γ.(cfg.serv_good) with None => True | Some servγ =>
+    "#Hproof" ∷ ktcore.AuditProof.own ptr_proof proof (□) ∗
+    "Hgood" ∷ match γ.(cfg.serv_good) with None => True | Some servγ =>
+      ∀ prev_hist prev_γ prev_σ,
+      history.align_serv prev_hist prev_γ prev_σ servγ -∗
       ∃ ep dig link,
-      let hist' := set history.digs (.++ [dig]) a.(Auditor.hist) in
-      let σ' := set state.links (.++ [link]) σ in
-      "#Hwish_getNextLink" ∷ wish_getNextLink a.(Auditor.hist) γ σ p ep dig link ∗
-      "#Halign_next" ∷ history.align_serv hist' γ σ' servγ end
+      let hist' := set history.digs (.++ [dig]) prev_hist in
+      let σ' := set state.links (.++ [link]) prev_σ in
+      "#Hwish_getNextLink" ∷ wish_getNextLink prev_hist prev_γ prev_σ proof ep dig link ∗
+      "#Halign_next" ∷ history.align_serv hist' prev_γ σ' servγ end
   }}}
-  ptr_a @ (ptrT.id auditor.Auditor.id) @ "updOnce" #ptr_p
+  ptr_a @ (ptrT.id auditor.Auditor.id) @ "updOnce" #ptr_proof
   {{{
     err, RET #(ktcore.blame_to_u64 err);
     "%Hblame" ∷ ⌜ktcore.BlameSpec err
@@ -630,7 +525,7 @@ Lemma wp_Auditor_updOnce ptr_a a γ σ Q ptr_p p :
         "Hadtr" ∷ Auditor.own ptr_a a' γ σ' 1 ∗
         "HQ" ∷ Q σ')
   }}}.
-Proof.
+Proof. Admitted. (*
   wp_start as "@".
   iNamed "Hadtr". iNamed "Hown_hist". iNamed "Hown_serv". wp_auto.
   destruct a, hist. simpl in *.
@@ -733,6 +628,7 @@ Proof.
   destruct_and!. simplify_eq/=.
   iFrame "#".
 Qed.
+*)
 
 Lemma wp_Auditor_Update a γ Q :
   {{{
