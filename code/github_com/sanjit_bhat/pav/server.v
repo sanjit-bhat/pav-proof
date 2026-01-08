@@ -151,8 +151,8 @@ Definition NewRpcServerⁱᵐᵖˡ : val :=
       then return: (#())
       else do:  #());;;
       do:  (let: "$a0" := (![#uint64T] (struct.field_ref #PutArg #"Uid"%go (![#ptrT] "a"))) in
-      let: "$a1" := (![#sliceT] (struct.field_ref #PutArg #"Pk"%go (![#ptrT] "a"))) in
-      let: "$a2" := (![#uint64T] (struct.field_ref #PutArg #"Ver"%go (![#ptrT] "a"))) in
+      let: "$a1" := (![#uint64T] (struct.field_ref #PutArg #"Ver"%go (![#ptrT] "a"))) in
+      let: "$a2" := (![#sliceT] (struct.field_ref #PutArg #"Pk"%go (![#ptrT] "a"))) in
       (method_call #(ptrT.id Server.id) #"Put"%go (![#ptrT] "s")) "$a0" "$a1" "$a2");;;
       let: "$r0" := #slice.nil in
       do:  ((![#ptrT] "reply") <-[#sliceT] "$r0");;;
@@ -1187,8 +1187,8 @@ Definition Server__Startⁱᵐᵖˡ : val :=
 
 Definition Work : go_type := structT [
   "Uid" :: uint64T;
-  "Pk" :: sliceT;
   "Ver" :: uint64T;
+  "Pk" :: sliceT;
   "Err" :: boolT
 ].
 #[global] Typeclasses Opaque Work.
@@ -1198,19 +1198,19 @@ Definition Work : go_type := structT [
 
    go: server.go:70:18 *)
 Definition Server__Putⁱᵐᵖˡ : val :=
-  λ: "s" "uid" "pk" "ver",
+  λ: "s" "uid" "ver" "pk",
     exception_do (let: "s" := (mem.alloc "s") in
-    let: "ver" := (mem.alloc "ver") in
     let: "pk" := (mem.alloc "pk") in
+    let: "ver" := (mem.alloc "ver") in
     let: "uid" := (mem.alloc "uid") in
     do:  (let: "$chan" := (![type.chanT #ptrT] (struct.field_ref #Server #"workQ"%go (![#ptrT] "s"))) in
     let: "$v" := (mem.alloc (let: "$Uid" := (![#uint64T] "uid") in
-    let: "$Pk" := (![#sliceT] "pk") in
     let: "$Ver" := (![#uint64T] "ver") in
+    let: "$Pk" := (![#sliceT] "pk") in
     struct.make #Work [{
       "Uid" ::= "$Uid";
-      "Pk" ::= "$Pk";
       "Ver" ::= "$Ver";
+      "Pk" ::= "$Pk";
       "Err" ::= type.zero_val #boolT
     }])) in
     chan.send #ptrT "$chan" "$v");;;
@@ -1321,19 +1321,19 @@ Definition Server__workerⁱᵐᵖˡ : val :=
   λ: "s" <>,
     exception_do (let: "s" := (mem.alloc "s") in
     (for: (λ: <>, #true); (λ: <>, #()) := λ: <>,
-      let: "work" := (mem.alloc (type.zero_val #sliceT)) in
+      let: "w" := (mem.alloc (type.zero_val #sliceT)) in
       let: "$r0" := (let: "$a0" := (![type.chanT #ptrT] (struct.field_ref #Server #"workQ"%go (![#ptrT] "s"))) in
       (func_call #getWork) "$a0") in
-      do:  ("work" <-[#sliceT] "$r0");;;
-      (if: (let: "$a0" := (![#sliceT] "work") in
+      do:  ("w" <-[#sliceT] "$r0");;;
+      (if: (let: "$a0" := (![#sliceT] "w") in
       slice.len "$a0") = #(W64 0)
       then continue: #()
       else do:  #());;;
-      do:  (let: "$a0" := (![#sliceT] "work") in
+      do:  (let: "$a0" := (![#sliceT] "w") in
       (method_call #(ptrT.id Server.id) #"doWork"%go (![#ptrT] "s")) "$a0"));;;
     return: #()).
 
-(* go: server.go:132:6 *)
+(* go: server.go:134:6 *)
 Definition getWorkⁱᵐᵖˡ : val :=
   λ: "workQ",
     exception_do (let: "work" := (mem.alloc (type.zero_val #sliceT)) in
@@ -1368,7 +1368,7 @@ Definition getWorkⁱᵐᵖˡ : val :=
          )]));;;
     return: (![#sliceT] "work")).
 
-(* go: server.go:150:18 *)
+(* go: server.go:152:18 *)
 Definition Server__doWorkⁱᵐᵖˡ : val :=
   λ: "s" "work",
     exception_do (let: "s" := (mem.alloc "s") in
@@ -1388,7 +1388,7 @@ Definition Server__doWorkⁱᵐᵖˡ : val :=
 
 Definition New : go_string := "github.com/sanjit-bhat/pav/server.New"%go.
 
-(* go: server.go:162:6 *)
+(* go: server.go:164:6 *)
 Definition Newⁱᵐᵖˡ : val :=
   λ: <>,
     exception_do (let: "mu" := (mem.alloc (type.zero_val #ptrT)) in
@@ -1494,14 +1494,14 @@ Definition Newⁱᵐᵖˡ : val :=
     do:  (Fork ("$go" #()));;;
     return: (![#ptrT] "s", ![#cryptoffi.SigPublicKey] "sigPk")).
 
-(* go: server.go:187:18 *)
+(* go: server.go:190:18 *)
 Definition Server__checkWorkⁱᵐᵖˡ : val :=
   λ: "s" "work",
     exception_do (let: "s" := (mem.alloc "s") in
     let: "work" := (mem.alloc "work") in
-    let: "uidSet" := (mem.alloc (type.zero_val (type.mapT #uint64T #boolT))) in
+    let: "uids" := (mem.alloc (type.zero_val (type.mapT #uint64T #boolT))) in
     let: "$r0" := (map.make #uint64T #boolT) in
-    do:  ("uidSet" <-[type.mapT #uint64T #boolT] "$r0");;;
+    do:  ("uids" <-[type.mapT #uint64T #boolT] "$r0");;;
     let: "$range" := (![#sliceT] "work") in
     (let: "w" := (mem.alloc (type.zero_val #ptrT)) in
     slice.for_range #ptrT "$range" (λ: "$key" "$value",
@@ -1521,7 +1521,7 @@ Definition Server__checkWorkⁱᵐᵖˡ : val :=
         continue: #()
       else do:  #());;;
       let: "ok" := (mem.alloc (type.zero_val #boolT)) in
-      let: ("$ret0", "$ret1") := (map.get (![type.mapT #uint64T #boolT] "uidSet") (![#uint64T] "uid")) in
+      let: ("$ret0", "$ret1") := (map.get (![type.mapT #uint64T #boolT] "uids") (![#uint64T] "uid")) in
       let: "$r0" := "$ret0" in
       let: "$r1" := "$ret1" in
       do:  "$r0";;;
@@ -1533,10 +1533,10 @@ Definition Server__checkWorkⁱᵐᵖˡ : val :=
         continue: #()
       else do:  #());;;
       let: "$r0" := #false in
-      do:  (map.insert (![type.mapT #uint64T #boolT] "uidSet") (![#uint64T] "uid") "$r0")));;;
+      do:  (map.insert (![type.mapT #uint64T #boolT] "uids") (![#uint64T] "uid") "$r0")));;;
     return: #()).
 
-(* go: server.go:207:18 *)
+(* go: server.go:210:18 *)
 Definition Server__makeEntriesⁱᵐᵖˡ : val :=
   λ: "s" "work",
     exception_do (let: "ents" := (mem.alloc (type.zero_val #sliceT)) in
@@ -1580,7 +1580,7 @@ Definition Server__makeEntriesⁱᵐᵖˡ : val :=
     do:  ((method_call #(ptrT.id sync.WaitGroup.id) #"Wait"%go (![#ptrT] "wg")) #());;;
     return: (![#sliceT] "ents")).
 
-(* go: server.go:227:18 *)
+(* go: server.go:230:18 *)
 Definition Server__makeEntryⁱᵐᵖˡ : val :=
   λ: "s" "in" "out",
     exception_do (let: "s" := (mem.alloc "s") in
@@ -1619,7 +1619,7 @@ Definition Server__makeEntryⁱᵐᵖˡ : val :=
     do:  ((struct.field_ref #mapEntry #"val"%go (![#ptrT] "out")) <-[#sliceT] "$r0");;;
     return: #()).
 
-(* go: server.go:238:18 *)
+(* go: server.go:241:18 *)
 Definition Server__addEntriesⁱᵐᵖˡ : val :=
   λ: "s" "work" "ents",
     exception_do (let: "s" := (mem.alloc "s") in
@@ -1702,7 +1702,7 @@ Definition Server__addEntriesⁱᵐᵖˡ : val :=
 
 (* getHist returns a history of membership proofs for all post-prefix versions.
 
-   go: server.go:264:18 *)
+   go: server.go:266:18 *)
 Definition Server__getHistⁱᵐᵖˡ : val :=
   λ: "s" "uid" "prefixLen",
     exception_do (let: "hist" := (mem.alloc (type.zero_val #sliceT)) in
@@ -1774,7 +1774,7 @@ Definition Server__getHistⁱᵐᵖˡ : val :=
 
 (* getBound returns a non-membership proof for the boundary version.
 
-   go: server.go:280:18 *)
+   go: server.go:282:18 *)
 Definition Server__getBoundⁱᵐᵖˡ : val :=
   λ: "s" "uid" "numVers",
     exception_do (let: "bound" := (mem.alloc (type.zero_val #ptrT)) in

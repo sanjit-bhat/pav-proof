@@ -1000,8 +1000,8 @@ Section def.
 Context `{ffi_syntax}.
 Record t := mk {
   Uid' : w64;
-  Pk' : slice.t;
   Ver' : w64;
+  Pk' : slice.t;
   Err' : bool;
 }.
 End def.
@@ -1016,13 +1016,13 @@ Global Instance Work_wf : struct.Wf server.Work.
 Proof. apply _. Qed.
 
 Global Instance settable_Work : Settable Work.t :=
-  settable! Work.mk < Work.Uid'; Work.Pk'; Work.Ver'; Work.Err' >.
+  settable! Work.mk < Work.Uid'; Work.Ver'; Work.Pk'; Work.Err' >.
 Global Instance into_val_Work : IntoVal Work.t :=
   {| to_val_def v :=
     struct.val_aux server.Work [
     "Uid" ::= #(Work.Uid' v);
-    "Pk" ::= #(Work.Pk' v);
     "Ver" ::= #(Work.Ver' v);
+    "Pk" ::= #(Work.Pk' v);
     "Err" ::= #(Work.Err' v)
     ]%struct
   |}.
@@ -1039,10 +1039,10 @@ Final Obligation. solve_decision. Qed.
 Global Instance into_val_struct_field_Work_Uid : IntoValStructField "Uid" server.Work Work.Uid'.
 Proof. solve_into_val_struct_field. Qed.
 
-Global Instance into_val_struct_field_Work_Pk : IntoValStructField "Pk" server.Work Work.Pk'.
+Global Instance into_val_struct_field_Work_Ver : IntoValStructField "Ver" server.Work Work.Ver'.
 Proof. solve_into_val_struct_field. Qed.
 
-Global Instance into_val_struct_field_Work_Ver : IntoValStructField "Ver" server.Work Work.Ver'.
+Global Instance into_val_struct_field_Work_Pk : IntoValStructField "Pk" server.Work Work.Pk'.
 Proof. solve_into_val_struct_field. Qed.
 
 Global Instance into_val_struct_field_Work_Err : IntoValStructField "Err" server.Work Work.Err'.
@@ -1050,23 +1050,23 @@ Proof. solve_into_val_struct_field. Qed.
 
 
 Context `{!ffi_model, !ffi_semantics _ _, !ffi_interp _, !heapGS Σ}.
-Global Instance wp_struct_make_Work Uid' Pk' Ver' Err':
+Global Instance wp_struct_make_Work Uid' Ver' Pk' Err':
   PureWp True
     (struct.make #server.Work (alist_val [
       "Uid" ::= #Uid';
-      "Pk" ::= #Pk';
       "Ver" ::= #Ver';
+      "Pk" ::= #Pk';
       "Err" ::= #Err'
     ]))%struct
-    #(Work.mk Uid' Pk' Ver' Err').
+    #(Work.mk Uid' Ver' Pk' Err').
 Proof. solve_struct_make_pure_wp. Qed.
 
 
 Global Instance Work_struct_fields_split dq l (v : Work.t) :
   StructFieldsSplit dq l v (
     "HUid" ∷ l ↦s[server.Work :: "Uid"]{dq} v.(Work.Uid') ∗
-    "HPk" ∷ l ↦s[server.Work :: "Pk"]{dq} v.(Work.Pk') ∗
     "HVer" ∷ l ↦s[server.Work :: "Ver"]{dq} v.(Work.Ver') ∗
+    "HPk" ∷ l ↦s[server.Work :: "Pk"]{dq} v.(Work.Pk') ∗
     "HErr" ∷ l ↦s[server.Work :: "Err"]{dq} v.(Work.Err')
   ).
 Proof.
@@ -1076,8 +1076,8 @@ Proof.
 
   rewrite -!/(typed_pointsto_def _ _ _) -!typed_pointsto_unseal.
   simpl_one_flatten_struct (# (Work.Uid' v)) (server.Work) "Uid"%go.
-  simpl_one_flatten_struct (# (Work.Pk' v)) (server.Work) "Pk"%go.
   simpl_one_flatten_struct (# (Work.Ver' v)) (server.Work) "Ver"%go.
+  simpl_one_flatten_struct (# (Work.Pk' v)) (server.Work) "Pk"%go.
 
   solve_field_ref_f.
 Qed.
