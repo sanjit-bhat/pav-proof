@@ -1,13 +1,37 @@
+# Formal verification of the Pav system
+
 - this project formally verifies the pav Key Transparency system,
 written in golang.
 - it uses the perennial framework, built on iris and stdpp,
 which is built on the rocq theorem prover.
-many of these deps have been added as claude working directories.
+- pav, perennial, iris, and stdpp have been added as claude working dirs.
+
+## source organization
+
 - "new" perennial proofs have three main directories:
     - `code/`: Goosed (compiled) golang code.
-    - `generatedproof/`: auto-generated proofs.
-    you will never need to reference these; they're automatically applied.
-    - `proof/`: proofs (usually WP-style lemmas) about the code.
+    - `generatedproof/`: you will never need to read these;
+    they're automatically applied.
+    - `proof/`: the proof-level interface for a pkg,
+    written with Hoare Triples and iris resources.
+- inside `proof/`, there's a file for every go pkg.
+for larger pkgs, the proof is broken into multiple files in a `{name}_proof` dir.
+
+## rules
+
 - do not run the rocq compiler.
 - if you aren't confident about something, it's perfectly fine to say that.
-there isn't much rocq / iris code out there to learn from.
+there isn't much perennial / iris / rocq code out there to learn from.
+
+## files to read
+
+- the relevant pav go code for the component you're working on.
+- @proof/auditor_proof/auditor.v and @proof/auditor_proof/rpc.v
+are a good reference for predicate structure.
+
+## files to skip
+
+- `*_test.go`
+- `rpc.go` (RPC stubs)
+- `serde/` (serde compiler)
+- `*.out.go`, `serde.v` (generated serde code)
