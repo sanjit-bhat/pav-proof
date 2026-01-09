@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "~/src/pav",
+      "~/src/peren",
+      "~/src/iris",
+      "~/src/stdpp"
+    ]
+  }
+}
