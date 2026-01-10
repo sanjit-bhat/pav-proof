@@ -616,8 +616,9 @@ Definition checkMembⁱᵐᵖˡ : val :=
     then return: (![#boolT] "err")
     else do:  #());;;
     let: "mapVal" := (mem.alloc (type.zero_val #sliceT)) in
-    let: "$r0" := (let: "$a0" := (![#ptrT] (struct.field_ref #ktcore.Memb #"PkOpen"%go (![#ptrT] "memb"))) in
-    (func_call #ktcore.GetMapVal) "$a0") in
+    let: "$r0" := (let: "$a0" := (![#sliceT] (struct.field_ref #ktcore.CommitOpen #"Val"%go (![#ptrT] (struct.field_ref #ktcore.Memb #"PkOpen"%go (![#ptrT] "memb"))))) in
+    let: "$a1" := (![#sliceT] (struct.field_ref #ktcore.CommitOpen #"Rand"%go (![#ptrT] (struct.field_ref #ktcore.Memb #"PkOpen"%go (![#ptrT] "memb"))))) in
+    (func_call #ktcore.GetMapVal) "$a0" "$a1") in
     do:  ("mapVal" <-[#sliceT] "$r0");;;
     let: "dig0" := (mem.alloc (type.zero_val #sliceT)) in
     let: ("$ret0", "$ret1") := (let: "$a0" := (![#sliceT] "label") in

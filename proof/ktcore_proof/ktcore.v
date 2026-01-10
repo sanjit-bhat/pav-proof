@@ -14,10 +14,10 @@ Section proof.
 Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
 Context `{!pavG Σ}.
 
-Definition wish_VrfSig pk vrfPk sig : iProp Σ :=
-  let obj := VrfSig.mk' (W8 VrfSigTag) vrfPk in
+Definition wish_VrfSig sig_pk vrf_pk sig : iProp Σ :=
+  let obj := VrfSig.mk' (W8 VrfSigTag) vrf_pk in
   let enc := VrfSig.pure_enc obj in
-  "#His_sig" ∷ cryptoffi.is_sig pk enc sig ∗
+  "#His_sig" ∷ cryptoffi.is_sig sig_pk enc sig ∗
   "%Hvalid" ∷ ⌜VrfSig.valid obj⌝.
 
 Lemma wp_SignVrf ptr_sk pk γ sl_vrfPk vrfPk :
@@ -31,7 +31,7 @@ Lemma wp_SignVrf ptr_sk pk γ sl_vrfPk vrfPk :
   {{{
     sl_sig sig, RET #sl_sig;
     "#Hsl_sig" ∷ sl_sig ↦*□ sig ∗
-    "#Hwish_vrfSig" ∷ wish_VrfSig pk vrfPk sig
+    "#Hwish_VrfSig" ∷ wish_VrfSig pk vrfPk sig
   }}}.
 Proof.
   simpl. wp_start as "@". wp_auto.
@@ -70,7 +70,7 @@ Lemma wp_VerifyVrfSig sl_pk pk sl_vrfPk vrfPk sl_sig sig :
       match err with
       | true => ¬ wish_VrfSig pk vrfPk sig
       | false =>
-        "#Hwish_vrfSig" ∷ wish_VrfSig pk vrfPk sig
+        "#Hwish_VrfSig" ∷ wish_VrfSig pk vrfPk sig
       end
   }}}.
 Proof.
@@ -92,10 +92,10 @@ Proof.
   - by iFrame.
 Qed.
 
-Definition wish_LinkSig pk ep link sig : iProp Σ :=
+Definition wish_LinkSig sig_pk ep link sig : iProp Σ :=
   let obj := LinkSig.mk' (W8 LinkSigTag) ep link in
   let enc := LinkSig.pure_enc obj in
-  "#His_sig" ∷ cryptoffi.is_sig pk enc sig ∗
+  "#His_sig" ∷ cryptoffi.is_sig sig_pk enc sig ∗
   "%Hvalid" ∷ ⌜LinkSig.valid obj⌝.
 
 Lemma wp_SignLink ptr_sk pk γ epoch sl_link link :
@@ -109,7 +109,7 @@ Lemma wp_SignLink ptr_sk pk γ epoch sl_link link :
   {{{
     sl_sig sig, RET #sl_sig;
     "#Hsl_sig" ∷ sl_sig ↦*□ sig ∗
-    "#Hwish_linkSig" ∷ wish_LinkSig pk epoch link sig
+    "#Hwish_LinkSig" ∷ wish_LinkSig pk epoch link sig
   }}}.
 Proof.
   simpl. wp_start as "@". wp_auto.
@@ -148,7 +148,7 @@ Lemma wp_VerifyLinkSig sl_pk pk epoch sl_link link sl_sig sig :
       match err with
       | true => ¬ wish_LinkSig pk epoch link sig
       | false =>
-        "#Hwish_linkSig" ∷ wish_LinkSig pk epoch link sig
+        "#Hwish_LinkSig" ∷ wish_LinkSig pk epoch link sig
       end
   }}}.
 Proof.
@@ -170,6 +170,25 @@ Proof.
   - by iFrame.
 Qed.
 
+Definition is_MapLabel vrf_pk uid ver map_label : iProp Σ :=
+  let enc := MapLabel.pure_enc (MapLabel.mk' uid ver) in
+  cryptoffi.is_vrf_out vrf_pk enc map_label.
+
+Lemma is_MapLabel_det pk uid ver map_label0 map_label1 :
+  is_MapLabel pk uid ver map_label0 -∗
+  is_MapLabel pk uid ver map_label1 -∗
+  ⌜map_label0 = map_label1⌝.
+Proof.
+  rewrite /is_MapLabel.
+  iIntros "#H0 #H1".
+  iDestruct (cryptoffi.is_vrf_out_det with "H0 H1") as %->.
+  done.
+Qed.
+
+Definition is_MapLabelProof vrf_pk uid ver proof : iProp Σ :=
+  let enc := MapLabel.pure_enc (MapLabel.mk' uid ver) in
+  cryptoffi.is_vrf_proof vrf_pk enc proof.
+
 Lemma wp_ProveMapLabel ptr_sk pk (uid ver : w64) :
   {{{
     is_pkg_init ktcore ∗
@@ -178,11 +197,10 @@ Lemma wp_ProveMapLabel ptr_sk pk (uid ver : w64) :
   @! ktcore.ProveMapLabel #ptr_sk #uid #ver
   {{{
     sl_label label sl_proof proof, RET (#sl_label, #sl_proof);
-    let enc := MapLabel.pure_enc (MapLabel.mk' uid ver) in
-    "Hsl_label" ∷ sl_label ↦* label ∗
-    "Hsl_proof" ∷ sl_proof ↦* proof ∗
-    "#His_vrf_proof" ∷ cryptoffi.is_vrf_proof pk enc proof ∗
-    "#His_vrf_out" ∷ cryptoffi.is_vrf_out pk enc label
+    "#Hsl_label" ∷ sl_label ↦*□ label ∗
+    "#Hsl_proof" ∷ sl_proof ↦*□ proof ∗
+    "#His_Label" ∷ is_MapLabel pk uid ver label ∗
+    "#His_LabelProof" ∷ is_MapLabelProof pk uid ver proof
   }}}.
 Proof.
   wp_start as "@". wp_auto.
@@ -194,8 +212,11 @@ Proof.
     as "* (Hsl_b&Hcap_b&_)".
   { iFrame "#". }
   simpl in *.
+  rewrite -wp_fupd.
   wp_apply (cryptoffi.wp_VrfPrivateKey_Prove with "[$Hsl_b]") as "* @".
   { iFrame "#". }
+  iPersist "Hsl_out Hsl_proof".
+  iModIntro.
   iApply "HΦ".
   iFrame "∗#".
 Qed.
@@ -208,9 +229,8 @@ Lemma wp_EvalMapLabel ptr_sk pk (uid ver : w64) :
   @! ktcore.EvalMapLabel #ptr_sk #uid #ver
   {{{
     sl_label label, RET #sl_label;
-    let enc := MapLabel.pure_enc (MapLabel.mk' uid ver) in
-    "Hsl_label" ∷ sl_label ↦* label ∗
-    "#His_vrf_out" ∷ cryptoffi.is_vrf_out pk enc label
+    "#Hsl_label" ∷ sl_label ↦*□ label ∗
+    "#His_Label" ∷ is_MapLabel pk uid ver label
   }}}.
 Proof.
   wp_start as "@". wp_auto.
@@ -222,8 +242,11 @@ Proof.
     as "* (Hsl_b&Hcap_b&_)".
   { iFrame "#". }
   simpl in *.
+  rewrite -wp_fupd.
   wp_apply (cryptoffi.wp_VrfPrivateKey_Evaluate with "[$Hsl_b]") as "* @".
   { iFrame "#". }
+  iPersist "Hsl_out".
+  iModIntro.
   iApply "HΦ".
   iFrame "∗#".
 Qed.
@@ -237,14 +260,13 @@ Lemma wp_CheckMapLabel ptr_pk pk (uid ver : w64) sl_proof proof :
   @! ktcore.CheckMapLabel #ptr_pk #uid #ver #sl_proof
   {{{
     sl_label label (err : bool), RET (#sl_label, #err);
-    let enc := MapLabel.pure_enc (MapLabel.mk' uid ver) in
-    "Hsl_label" ∷ sl_label ↦* label ∗
+    "#Hsl_label" ∷ sl_label ↦*□ label ∗
     "Hgenie" ∷
       match err with
-      | true => ¬ cryptoffi.is_vrf_proof pk enc proof
+      | true => ¬ is_MapLabelProof pk uid ver proof
       | false =>
-        "#His_proof" ∷ cryptoffi.is_vrf_proof pk enc proof ∗
-        "#His_out" ∷ cryptoffi.is_vrf_out pk enc label
+        "#His_Label" ∷ is_MapLabel pk uid ver label ∗
+        "#His_LabelProof" ∷ is_MapLabelProof pk uid ver proof
       end
   }}}.
 Proof.
@@ -257,35 +279,75 @@ Proof.
     as "* (Hsl_b&Hcap_b&_)".
   { iFrame "#". }
   simpl in *.
+  rewrite -wp_fupd.
   wp_apply (cryptoffi.wp_VrfPublicKey_Verify with "[$Hsl_b]") as "* H".
   { iFrame "#". }
   iNamedSuffix "H" "0".
+  iPersist "Hsl_out0 Hsl_proof0".
+  iModIntro.
+  iApply "HΦ".
+  iFrame "#".
+  case_match.
+  - iFrame.
+  - iNamed "Hgenie0". iFrame "#".
+Qed.
+
+Definition is_MapVal kt_pk rand map_val : iProp Σ :=
+  let enc := CommitOpen.pure_enc (CommitOpen.mk' kt_pk rand) in
+  cryptoffi.is_hash (Some enc) map_val.
+
+Lemma is_MapVal_det pk rand map_val0 map_val1 :
+  is_MapVal pk rand map_val0 -∗
+  is_MapVal pk rand map_val1 -∗
+  ⌜map_val0 = map_val1⌝.
+Proof.
+  iIntros "#H0 #H1".
+  iDestruct (cryptoffi.is_hash_det with "H0 H1") as %->.
+  done.
+Qed.
+
+Lemma wp_GetMapVal sl_pk pk sl_rand rand :
+  {{{
+    is_pkg_init ktcore ∗
+    "#Hsl_pk" ∷ sl_pk ↦*□ pk ∗
+    "#Hsl_rand" ∷ sl_rand ↦*□ rand
+  }}}
+  @! ktcore.GetMapVal #sl_pk #sl_rand
+  {{{
+    sl_mapVal mapVal, RET #sl_mapVal;
+    "#Hsl_mapVal" ∷ sl_mapVal ↦*□ mapVal ∗
+    "#His_MapVal" ∷ is_MapVal pk rand mapVal
+  }}}.
+Proof.
+  wp_start as "@". wp_auto.
+  wp_apply wp_slice_make3 as "* (Hsl_b&Hcap_b&_)"; [word|].
+  wp_apply wp_alloc as "* Hstruct".
+  iPersist "Hstruct".
+  replace (sint.nat _) with (0%nat) by word.
+  wp_apply (CommitOpen.wp_enc (CommitOpen.mk' _ _) with "[$Hsl_b $Hcap_b]")
+    as "* (Hsl_b&Hcap_b&_)".
+  { iFrame "#". }
+  simpl in *.
+  rewrite -wp_fupd.
+  wp_apply (cryptoutil.wp_Hash with "[$Hsl_b]") as "* @".
+  iPersist "Hsl_hash".
+  iModIntro.
   iApply "HΦ".
   iFrame "∗#".
 Qed.
 
-Lemma wp_GetMapVal ptr_pkOpen pkOpen :
-  {{{
-    is_pkg_init ktcore ∗
-    "#Hown" ∷ CommitOpen.own ptr_pkOpen pkOpen (□)
-  }}}
-  @! ktcore.GetMapVal #ptr_pkOpen
-  {{{
-    sl_MapVal MapVal, RET #sl_MapVal;
-    let enc := CommitOpen.pure_enc pkOpen in
-    "Hsl_MapVal" ∷ sl_MapVal ↦* MapVal ∗
-    "#His_MapVal" ∷ cryptoffi.is_hash (Some enc) MapVal
-  }}}.
+Definition is_CommitRand commit_secret label rand : iProp Σ :=
+  let enc := commit_secret ++ label in
+  cryptoffi.is_hash (Some enc) rand.
+
+Lemma is_CommitRand_det commit_secret label rand0 rand1 :
+  is_CommitRand commit_secret label rand0 -∗
+  is_CommitRand commit_secret label rand1 -∗
+  ⌜rand0 = rand1⌝.
 Proof.
-  wp_start as "@". wp_auto.
-  wp_apply (CommitOpen.wp_enc (CommitOpen.mk' _ _) with "[$Hown]")
-    as "* (Hsl_b&Hcap_b&_)".
-  { iDestruct own_slice_nil as "$".
-    iDestruct own_slice_cap_nil as "$". }
-  simpl in *.
-  wp_apply (cryptoutil.wp_Hash with "[$Hsl_b]") as "* @".
-  iApply "HΦ".
-  iFrame "∗#".
+  iIntros "#H0 #H1".
+  iDestruct (cryptoffi.is_hash_det with "H0 H1") as %->.
+  done.
 Qed.
 
 Lemma wp_GetCommitRand sl_commitSecret commitSecret sl_label label :
@@ -297,9 +359,8 @@ Lemma wp_GetCommitRand sl_commitSecret commitSecret sl_label label :
   @! ktcore.GetCommitRand #sl_commitSecret #sl_label
   {{{
     sl_rand rand, RET #sl_rand;
-    let enc := commitSecret ++ label in
-    "Hsl_rand" ∷ sl_rand ↦* rand ∗
-    "#His_CommitRand" ∷ cryptoffi.is_hash (Some enc) rand
+    "#Hsl_rand" ∷ sl_rand ↦*□ rand ∗
+    "#His_CommitRand" ∷ is_CommitRand commitSecret label rand
   }}}.
 Proof.
   wp_start as "@". wp_auto.
@@ -310,31 +371,32 @@ Proof.
   wp_apply (cryptoffi.wp_Hasher_Write with "[$Hown_hr0]") as "H".
   { iFrame "#". }
   iNamedSuffix "H" "1".
+  rewrite -wp_fupd.
   wp_apply (cryptoffi.wp_Hasher_Sum with "[$Hown_hr1]") as "* @".
   { iDestruct own_slice_nil as "$". }
+  iPersist "Hsl_b_out".
+  iModIntro.
   simpl.
   iApply "HΦ".
   iFrame "∗#".
 Qed.
 
-Definition wish_Memb pk uid ver dig memb : iProp Σ :=
+Definition wish_Memb vrf_pk uid ver dig memb : iProp Σ :=
   ∃ label mapVal,
-  let enc_label := ktcore.MapLabel.pure_enc (ktcore.MapLabel.mk' uid ver) in
-  let enc_val := ktcore.CommitOpen.pure_enc memb.(ktcore.Memb.PkOpen) in
-  "#His_vrf_proof" ∷ cryptoffi.is_vrf_proof pk enc_label memb.(ktcore.Memb.LabelProof) ∗
-  "#His_vrf_out" ∷ cryptoffi.is_vrf_out pk enc_label label ∗
-  "#His_mapVal" ∷ cryptoffi.is_hash (Some enc_val) mapVal ∗
+  let open := memb.(ktcore.Memb.PkOpen) in
+  "#His_Label" ∷ is_MapLabel vrf_pk uid ver label ∗
+  "#His_LabelProof" ∷ is_MapLabelProof vrf_pk uid ver memb.(ktcore.Memb.LabelProof) ∗
+  "#His_MapVal" ∷ is_MapVal open.(CommitOpen.Val) open.(CommitOpen.Rand) mapVal ∗
   "#Hwish_memb" ∷ merkle.wish_Memb label mapVal memb.(ktcore.Memb.MerkleProof) dig.
 
-Definition wish_ListMemb pk uid (prefixLen : w64) dig hist : iProp Σ :=
+Definition wish_ListMemb vrf_pk uid (prefixLen : w64) dig hist : iProp Σ :=
   ([∗ list] ver ↦ memb ∈ hist,
-    wish_Memb pk uid (uint.Z prefixLen + ver) dig memb).
+    wish_Memb vrf_pk uid (uint.Z prefixLen + ver) dig memb).
 
-Definition wish_NonMemb pk uid ver dig nonMemb : iProp Σ :=
+Definition wish_NonMemb vrf_pk uid ver dig nonMemb : iProp Σ :=
   ∃ label,
-  let enc := ktcore.MapLabel.pure_enc (ktcore.MapLabel.mk' uid ver) in
-  "#His_vrf_proof" ∷ cryptoffi.is_vrf_proof pk enc nonMemb.(ktcore.NonMemb.LabelProof) ∗
-  "#His_vrf_out" ∷ cryptoffi.is_vrf_out pk enc label ∗
+  "#His_Label" ∷ is_MapLabel vrf_pk uid ver label ∗
+  "#His_LabelProof" ∷ is_MapLabelProof vrf_pk uid ver nonMemb.(ktcore.NonMemb.LabelProof) ∗
   "#Hwish_nonMemb" ∷ merkle.wish_NonMemb label nonMemb.(ktcore.NonMemb.MerkleProof) dig.
 
 Definition wish_ListUpdate_aux prevDig updates digs : iProp Σ :=

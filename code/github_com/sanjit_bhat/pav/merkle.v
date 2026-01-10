@@ -418,7 +418,7 @@ Definition node__findⁱᵐᵖˡ : val :=
 Definition getProofCapⁱᵐᵖˡ : val :=
   λ: "depth",
     exception_do (let: "depth" := (mem.alloc "depth") in
-    return: ((((((#(W64 8) + ((![#uint64T] "depth") * cryptoffi.HashLen)) + #(W64 1)) + #(W64 8)) + cryptoffi.HashLen) + #(W64 8)) + #(W64 32))).
+    return: ((((((#(W64 8) + ((![#uint64T] "depth") * cryptoffi.HashLen)) + #(W64 1)) + #(W64 8)) + cryptoffi.HashLen) + #(W64 8)) + cryptoffi.HashLen)).
 
 Definition VerifyMemb : go_string := "github.com/sanjit-bhat/pav/merkle.VerifyMemb"%go.
 

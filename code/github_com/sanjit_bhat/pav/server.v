@@ -1601,17 +1601,10 @@ Definition Server__makeEntryⁱᵐᵖˡ : val :=
     let: "$a1" := (![#sliceT] "mapLabel") in
     (func_call #ktcore.GetCommitRand) "$a0" "$a1") in
     do:  ("rand" <-[#sliceT] "$r0");;;
-    let: "open" := (mem.alloc (type.zero_val #ptrT)) in
-    let: "$r0" := (mem.alloc (let: "$Val" := (![#sliceT] (struct.field_ref #Work #"Pk"%go (![#ptrT] "in"))) in
-    let: "$Rand" := (![#sliceT] "rand") in
-    struct.make #ktcore.CommitOpen [{
-      "Val" ::= "$Val";
-      "Rand" ::= "$Rand"
-    }])) in
-    do:  ("open" <-[#ptrT] "$r0");;;
     let: "mapVal" := (mem.alloc (type.zero_val #sliceT)) in
-    let: "$r0" := (let: "$a0" := (![#ptrT] "open") in
-    (func_call #ktcore.GetMapVal) "$a0") in
+    let: "$r0" := (let: "$a0" := (![#sliceT] (struct.field_ref #Work #"Pk"%go (![#ptrT] "in"))) in
+    let: "$a1" := (![#sliceT] "rand") in
+    (func_call #ktcore.GetMapVal) "$a0" "$a1") in
     do:  ("mapVal" <-[#sliceT] "$r0");;;
     let: "$r0" := (![#sliceT] "mapLabel") in
     do:  ((struct.field_ref #mapEntry #"label"%go (![#ptrT] "out")) <-[#sliceT] "$r0");;;
@@ -1619,7 +1612,7 @@ Definition Server__makeEntryⁱᵐᵖˡ : val :=
     do:  ((struct.field_ref #mapEntry #"val"%go (![#ptrT] "out")) <-[#sliceT] "$r0");;;
     return: #()).
 
-(* go: server.go:241:18 *)
+(* go: server.go:240:18 *)
 Definition Server__addEntriesⁱᵐᵖˡ : val :=
   λ: "s" "work" "ents",
     exception_do (let: "s" := (mem.alloc "s") in
@@ -1702,7 +1695,7 @@ Definition Server__addEntriesⁱᵐᵖˡ : val :=
 
 (* getHist returns a history of membership proofs for all post-prefix versions.
 
-   go: server.go:266:18 *)
+   go: server.go:265:18 *)
 Definition Server__getHistⁱᵐᵖˡ : val :=
   λ: "s" "uid" "prefixLen",
     exception_do (let: "hist" := (mem.alloc (type.zero_val #sliceT)) in
@@ -1774,7 +1767,7 @@ Definition Server__getHistⁱᵐᵖˡ : val :=
 
 (* getBound returns a non-membership proof for the boundary version.
 
-   go: server.go:282:18 *)
+   go: server.go:281:18 *)
 Definition Server__getBoundⁱᵐᵖˡ : val :=
   λ: "s" "uid" "numVers",
     exception_do (let: "bound" := (mem.alloc (type.zero_val #ptrT)) in
