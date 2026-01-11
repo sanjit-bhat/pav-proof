@@ -6,6 +6,7 @@ or unintended name shadows. *)
 (* for inG's. not exported. *)
 From New.proof Require Import proof_prelude.
 From New.proof Require Import sync.
+From New.proof.github_com.goose_lang.goose.model.channel.protocol Require Import base.
 
 (* add extra dependencies. *)
 From RecordUpdate Require Export RecordSet.
@@ -47,6 +48,7 @@ Class pavG Σ := {
   (* serverσ.pending. each uid has a mono_list of (ver, pk). *)
   #[global] pavG_serv_uids :: mono_listG (w64 * list w8) Σ;
   #[global] pavG_sync :: syncG Σ;
+  #[global] pavG_chan :: chanG Σ loc;
 }.
 
 (* misc. TODO: these should definitely go into separate file. *)

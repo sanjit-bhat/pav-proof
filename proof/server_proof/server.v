@@ -1,6 +1,7 @@
 From New.generatedproof.github_com.sanjit_bhat.pav Require Import server.
 
 From New.proof Require Import sync time.
+From New.proof.github_com.goose_lang.goose.model.channel.protocol Require Import simple.
 From New.proof.github_com.goose_lang Require Import std.
 From New.proof.github_com.sanjit_bhat.pav Require Import
   cryptoffi hashchain ktcore merkle.
@@ -305,122 +306,156 @@ End proof.
 (** golang server state. *)
 
 Module secrets.
+Record t := mk' {
+  commit : list w8;
+}.
+
 Section proof.
-(* commit is exposed for keyStore invariant *)
-Definition own ptr γ (commit : list w8) : iProp Σ :=
+Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
+Context `{!pavG Σ}.
+
+Definition own ptr obj γ : iProp Σ :=
   ∃ ptr_sig ptr_vrf sl_commit,
   "#Hstr_secrets" ∷ ptr ↦□ (server.secrets.mk ptr_sig ptr_vrf sl_commit) ∗
   "#Hown_sig" ∷ cryptoffi.own_sig_sk ptr_sig γ.(cfg.sig_pk)
     (ktcore.sigpred γ.(cfg.sigpredγ)) ∗
   "#Hown_vrf" ∷ cryptoffi.own_vrf_sk ptr_vrf γ.(cfg.vrf_pk) ∗
-  "#Hsl_commit" ∷ sl_commit ↦*□ commit ∗
-  "%Hlen_commit" ∷ ⌜Z.of_nat (length commit) = cryptoffi.hash_len⌝.
+  "#Hsl_commit" ∷ sl_commit ↦*□ obj.(commit) ∗
+  "%Hlen_commit" ∷ ⌜Z.of_nat (length obj.(commit)) = cryptoffi.hash_len⌝.
+
 End proof.
 End secrets.
 
 Module keyStore.
-(* Record exposed for method specs *)
 Record t := mk' {
-  hidden_map: gmap (list w8) (list w8);  (* label -> mapVal *)
-  plain_map: keys_ty;                     (* uid -> list pk *)
+  plain : keys_ty;
 }.
 
 Section proof.
-(* is_entry ties a single (uid, ver, pk) to its hidden map entry *)
-Definition is_entry γ commit (uid : w64) (ver : nat) pk label mapVal : iProp Σ :=
-  let enc_label := MapLabel.pure_enc (MapLabel.mk' uid (W64 ver)) in
-  ∃ rand,
-  let enc_val := CommitOpen.pure_enc (CommitOpen.mk' pk rand) in
-  "#His_vrf_out" ∷ cryptoffi.is_vrf_out γ.(cfg.vrf_pk) enc_label label ∗
-  "#His_rand" ∷ cryptoffi.is_hash (Some (commit ++ label)) rand ∗
-  "#His_mapVal" ∷ cryptoffi.is_hash (Some enc_val) mapVal.
+Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
+Context `{!pavG Σ}.
 
-(* is_valid ties plain_map to hidden_map via VRF + commitment *)
-Definition is_valid obj γ commit : iProp Σ :=
-  "[∗ map] uid ↦ pks ∈ obj.(plain_map),
-    [∗ list] ver ↦ pk ∈ pks,
-      ∃ label mapVal,
-      "#His_entry" ∷ is_entry γ commit uid ver pk label mapVal ∗
-      "%Hlook" ∷ ⌜obj.(hidden_map) !! label = Some mapVal⌝".
+Definition own_plain ptr_plain (plain : keys_ty) q : iProp Σ :=
+  ∃ ptr0_plain,
+  "Hptr_plain" ∷ map.own_map ptr_plain (DfracOwn q) ptr0_plain ∗
+  "Hptr0_plain" ∷ [∗ map] uid ↦ sl_pks;pks ∈ ptr0_plain;plain,
+    ∃ sl0_pks,
+    "Hsl_pks" ∷ sl_pks ↦*{#q} sl0_pks ∗
+    "Hcap_pks" ∷ own_slice_cap slice.t sl_pks (DfracOwn q) ∗
+    "#Hsl0_pks" ∷ ([∗ list] sl_pk;pk ∈ sl0_pks;pks,
+      "Hsl_pk" ∷ sl_pk ↦*□ pk).
 
-Definition own ptr (obj : t) γ commit dig q : iProp Σ :=
-  ∃ ptr_hidden ptr_plain,
-  "Hstr_keyStore" ∷ ptr ↦{#q} (server.keyStore.mk ptr_hidden ptr_plain) ∗
-  "Hown_hidden" ∷ merkle.own_Map ptr_hidden obj.(hidden_map) dig q ∗
-  "Hown_plain" ∷ own_map ptr_plain q obj.(plain_map) ∗
-  "#His_valid" ∷ is_valid obj γ commit ∗
-  "#His_map" ∷ merkle.is_map obj.(hidden_map) dig.
+Definition is_hidden γ commit_sec plain (hidden : gmap (list w8) (list w8)) : iProp Σ :=
+  [∗ map] uid ↦ kt_pks ∈ plain,
+    [∗ list] ver ↦ kt_pk ∈ kt_pks,
+      ∃ label rand mapVal,
+      "#His_MapLabel" ∷ ktcore.is_MapLabel γ.(cfg.vrf_pk) uid (W64 ver) label ∗
+      "#His_CommitRand" ∷ ktcore.is_CommitRand commit_sec label rand ∗
+      "#His_MapVal" ∷ ktcore.is_MapVal kt_pk rand mapVal ∗
+      "%Hlook" ∷ ⌜hidden !! label = Some mapVal⌝.
+
+Definition own ptr (obj : t) γ secs dig q : iProp Σ :=
+  ∃ ptr_hidden hidden ptr_plain,
+  "#Hstr_keyStore" ∷ ptr ↦□ (server.keyStore.mk ptr_hidden ptr_plain) ∗
+  "Hown_hidden" ∷ merkle.own_Map ptr_hidden hidden dig (DfracOwn q) ∗
+  "Hown_plain" ∷ own_plain ptr_plain obj.(plain) q ∗
+  "#His_hidden" ∷ is_hidden γ secs.(secrets.commit) obj.(plain) hidden ∗
+  "#His_dig" ∷ merkle.is_map hidden dig.
+
 End proof.
 End keyStore.
 
 Module history.
 Record t := mk' {
   digs: list (list w8);
-  audits: list ktcore.AuditProof.t;
 }.
 
 Section proof.
-Definition own ptr (obj : t) σ γ q : iProp Σ :=
-  ∃ ptr_chain sl_audits sl0_audits sl_vrfSig vrfSig,
+Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
+Context `{!pavG Σ}.
+
+Definition is_audits γ digs audits : iProp Σ :=
+  ∃ init_dig,
+  "%Hlen_audits" ∷ ⌜length digs = length audits⌝ ∗
+  "#His_upds" ∷ ([∗ list] ep ↦ aud ∈ audits,
+    (* AuditProof is a transition to an epoch.
+    for AuditProof @ ep0, need init_dig to transition from. *)
+    ∃ dig0 dig1,
+    "%Hlook0" ∷ ⌜(init_dig :: digs) !! ep = Some dig0⌝ ∗
+    "%Hlook1" ∷ ⌜(init_dig :: digs) !! (S ep) = Some dig1⌝ ∗
+    "#His_upd" ∷ ktcore.wish_ListUpdate dig0 aud.(ktcore.AuditProof.Updates) dig1) ∗
+  "#His_sigs" ∷ ([∗ list] ep ↦ aud ∈ audits,
+    ∃ link,
+    "#His_link" ∷ hashchain.is_chain (take (S ep) digs) None link (S ep) ∗
+    "#His_sig" ∷ ktcore.wish_LinkSig γ.(cfg.sig_pk) (W64 ep) link
+      aud.(ktcore.AuditProof.LinkSig)).
+
+Definition own ptr (obj : t) γ q : iProp Σ :=
+  ∃ ptr_chain sl_audits sl0_audits audits sl_vrfSig vrfSig,
   "Hstr_history" ∷ ptr ↦{#q} (server.history.mk ptr_chain sl_audits sl_vrfSig) ∗
-  "Hown_chain" ∷ hashchain.own ptr_chain obj.(digs) q ∗
+  "Hown_chain" ∷ hashchain.own ptr_chain obj.(digs) (DfracOwn q) ∗
+
   "Hsl_audits" ∷ sl_audits ↦*{#q} sl0_audits ∗
   "Hcap_audits" ∷ own_slice_cap loc sl_audits (DfracOwn q) ∗
-  "#Haudits" ∷ ([∗ list] idx ↦ p; aud ∈ sl0_audits; obj.(audits),
+  "#Hown_audits" ∷ ([∗ list] idx ↦ p; aud ∈ sl0_audits; audits,
     ktcore.AuditProof.own p aud (□)) ∗
+  "#His_audits" ∷ is_audits γ obj.(digs) audits ∗
+
   "#Hsl_vrfSig" ∷ sl_vrfSig ↦*□ vrfSig ∗
-  "#His_vrfSig" ∷ ktcore.wish_VrfSig γ.(cfg.sig_pk) γ.(cfg.vrf_pk) vrfSig ∗
-  "%Heq_digs" ∷ ⌜obj.(digs) = σ.(state.hist).*1⌝ ∗
-  "%Hlen_audits" ∷ ⌜length obj.(audits) = length σ.(state.hist)⌝.
+  "#His_vrfSig" ∷ ktcore.wish_VrfSig γ.(cfg.sig_pk) γ.(cfg.vrf_pk) vrfSig.
+
 End proof.
 End history.
 
-Module workQ.
-Section proof.
-(* Work item predicate - owns the pk slice and records the put permission *)
-Definition is_Work (w : loc) γ : iProp Σ :=
-  ∃ uid ver sl_pk pk err,
-  "Hstr_Work" ∷ w ↦□ (server.Work.mk uid ver sl_pk err) ∗
-  "Hsl_pk" ∷ sl_pk ↦* pk ∗
-  (* Permission to add this (uid, ver, pk) to server state *)
-  "#Hperm" ∷ ... (* mono_list_idx for this uid's version *).
+Module work.
+Record t := mk' {
+  Uid : w64;
+  Ver : w64;
+  Pk : list w8;
+  Err : bool;
+}.
 
-Definition own ptr (workQγ : simple_names) : iProp Σ :=
-  "#His_workQ" ∷ simple.is_simple workQγ ptr is_Work.
+Section proof.
+Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
+Context `{!pavG Σ}.
+
+Definition own ptr obj γ : iProp Σ :=
+  ∃ sl_pk uidγ i,
+  "Hstr_Work" ∷ ptr ↦ (server.Work.mk obj.(Uid) obj.(Ver) sl_pk obj.(Err)) ∗
+  "#Hsl_pk" ∷ sl_pk ↦*□ obj.(Pk) ∗
+  "%Hlook_uidγ" ∷ ⌜γ.(cfg.uidγ) !! obj.(Uid) = Some uidγ⌝ ∗
+  "#Hput_perm" ∷ mono_list_idx_own uidγ i (obj.(Ver), obj.(Pk)).
+
+Definition own_aux γ (ptr : loc) : iProp Σ := ∃ obj, own ptr obj γ.
+
 End proof.
-End workQ.
+End work.
 
 Module Server.
 Section proof.
-Record t := mk' {
-  keys: keyStore.t;
-  hist: history.t;
-  workQγ: simple_names;
-}.
+Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
+Context `{!pavG Σ}.
 
-Definition own ptr (obj : t) γ σ commit dig q : iProp Σ :=
-  ∃ ptr_secs ptr_keys ptr_hist ptr_workQ,
-  (* Struct fields - mu handled separately in lock_perm *)
+Definition own ptr γ σ q : iProp Σ :=
+  ∃ ptr_secs secs ptr_keys keys ptr_hist hist ptr_workQ workQγ lastDig,
   "#Hfld_secs" ∷ ptr ↦s[server.Server::"secs"]□ ptr_secs ∗
   "#Hfld_keys" ∷ ptr ↦s[server.Server::"keys"]□ ptr_keys ∗
   "#Hfld_hist" ∷ ptr ↦s[server.Server::"hist"]□ ptr_hist ∗
   "#Hfld_workQ" ∷ ptr ↦s[server.Server::"workQ"]□ ptr_workQ ∗
 
-  (* Sub-predicates - thread q through for RLock/Lock *)
-  "#Hown_secs" ∷ secrets.own ptr_secs γ commit ∗
-  "Hown_keys" ∷ keyStore.own ptr_keys obj.(keys) γ commit dig q ∗
-  "Hown_hist" ∷ history.own ptr_hist obj.(hist) σ γ q ∗
-  "#Hown_workQ" ∷ workQ.own ptr_workQ obj.(workQγ) ∗
+  "#Hown_secs" ∷ secrets.own ptr_secs secs γ ∗
+  "Hown_keys" ∷ keyStore.own ptr_keys keys γ secs lastDig q ∗
+  "Hown_hist" ∷ history.own ptr_hist hist γ q ∗
+  "#His_workQ" ∷ simple.is_simple workQγ ptr_workQ (work.own_aux γ) ∗
 
-  (* Consistency between keyStore and state *)
-  "%Heq_pending" ∷ ⌜obj.(keys).(keyStore.plain_map) = σ.(state.pending)⌝ ∗
-  (* Last dig in history matches current keyStore dig *)
-  "%Heq_dig" ∷ ⌜last σ.(state.hist).*1 = Some dig⌝.
+  "%Heq_hist" ∷ ⌜σ.(state.hist).*1 = hist.(history.digs)⌝ ∗
+  "%Heq_last_hist" ∷ ⌜last σ.(state.hist) = Some (lastDig, keys.(keyStore.plain))⌝.
 
 Definition lock_perm ptr γ : iProp Σ :=
   ∃ ptr_mu,
   "#Hfld_mu" ∷ ptr ↦s[server.Server::"mu"]□ ptr_mu ∗
-  "Hperm" ∷ own_RWMutex ptr_mu (λ q, ∃ obj σ commit dig, own ptr obj γ σ commit dig q).
+  "Hperm" ∷ own_RWMutex ptr_mu (λ q, ∃ σ, own ptr γ σ q).
+
 End proof.
 End Server.
 
