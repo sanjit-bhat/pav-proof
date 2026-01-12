@@ -42,13 +42,15 @@ Class sigpredG Σ := {
 }.
 
 Class pavG Σ := {
-  #[global] pavG_sigpred :: sigpredG Σ;
-  (* serverσ.hist. *)
-  #[global] pavG_serv_hist :: mono_listG (list w8 * (gmap w64 (list $ list w8))) Σ;
-  (* serverσ.pending. each uid has a mono_list of (ver, pk). *)
-  #[global] pavG_serv_uids :: mono_listG (w64 * list w8) Σ;
   #[global] pavG_sync :: syncG Σ;
   #[global] pavG_chan :: chanG Σ loc;
+  #[global] pavG_sigpred :: sigpredG Σ;
+  (* serverσ.pending. *)
+  #[global] pavG_serv_pend :: ghost_varG Σ (gmap w64 (list $ list w8));
+  (* serverσ put perms. each uid has mono_list of (ver, pk). *)
+  #[global] pavG_serv_uids :: mono_listG (w64 * list w8) Σ;
+  (* serverσ.hist. *)
+  #[global] pavG_serv_hist :: mono_listG (list w8 * (gmap w64 (list $ list w8))) Σ;
 }.
 
 (* misc. TODO: these should definitely go into separate file. *)
