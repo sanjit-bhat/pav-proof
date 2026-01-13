@@ -120,15 +120,15 @@ Proof.
   iPureIntro. repeat split. word.
 Qed.
 
-Lemma wp_CallAudit s good (prevEpoch : w64) :
+Lemma wp_CallAudit c good (prevEpoch : w64) :
   {{{
     is_pkg_init server ∗
-    "#His_serv" ∷ is_Server_rpc s good ∗
+    "#His_serv" ∷ is_rpc_cli c good ∗
     "#His_args" ∷ match good with None => True | Some γ =>
       ∃ (entry : list w8 * keys_ty),
       "#Hidx_ep" ∷ mono_list_idx_own γ.(cfg.histγ) (uint.nat prevEpoch) entry end
   }}}
-  @! server.CallAudit #s #prevEpoch
+  @! server.CallAudit #c #prevEpoch
   {{{
     sl_proofs err, RET (#sl_proofs, #(ktcore.blame_to_u64 err));
     "%Hblame" ∷ ⌜ktcore.BlameSpec err {[ktcore.BlameServFull:=option_bool good]}⌝ ∗

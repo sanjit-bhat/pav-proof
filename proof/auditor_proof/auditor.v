@@ -23,7 +23,7 @@ Context `{!pavG Σ}.
 Definition own ptr γ good : iProp Σ :=
   ∃ ptr_cli sl_sigPk sl_vrfPk sl_servVrfSig servVrfSig sl_adtrVrfSig adtrVrfSig,
   "#Hstr_serv" ∷ ptr ↦□ (auditor.serv.mk ptr_cli sl_sigPk sl_vrfPk sl_servVrfSig sl_adtrVrfSig) ∗
-  "#His_rpc" ∷ server.is_Server_rpc ptr_cli good ∗
+  "#His_rpc" ∷ server.is_rpc_cli ptr_cli good ∗
   "#Hsl_sigPk" ∷ sl_sigPk ↦*□ γ.(cfg.serv_sig_pk) ∗
   "#Hsl_vrfPk" ∷ sl_vrfPk ↦*□ γ.(cfg.vrf_pk) ∗
   "#Hsl_servVrfSig" ∷ sl_servVrfSig ↦*□ servVrfSig ∗
@@ -391,6 +391,7 @@ Definition wish_SignedVrf servPk adtrPk vrf : iProp Σ :=
     vrf.(SignedVrf.VrfPk) vrf.(SignedVrf.ServSig).
 
 Definition own_Auditor γ σ : iProp Σ :=
+  (* Auditor state lines up with sigpred state. *)
   "#Hgs_start_ep" ∷ ghost_var γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.start_ep)
     (□) σ.(state.start_ep) ∗
   (* other 1/2 in lock inv. *)
@@ -758,6 +759,55 @@ Proof.
   simpl.
   len.
 Qed.
+
+Lemma wp_New servGood (servAddr : w64) sl_servPk servPk :
+  {{{
+    is_pkg_init auditor ∗
+    "#Hsl_servPk" ∷ sl_servPk ↦*□ servPk ∗
+    "%Heq_servPk" ∷ ⌜match servGood with None => True | Some servγ =>
+      servPk = servγ.(server.cfg.sig_pk) end⌝ ∗
+    "#His_servPk" ∷ match servGood with None => True | Some servγ =>
+      cryptoffi.is_sig_pk servPk (ktcore.sigpred servγ.(server.cfg.sigpredγ)) end
+  }}}
+  @! auditor.New #servAddr #sl_servPk
+  {{{
+    ptr_a sl_sigPk err, RET (#ptr_a, #sl_sigPk, #(ktcore.blame_to_u64 err));
+    "%Hblame" ∷ ⌜ktcore.BlameSpec err
+      {[ktcore.BlameServFull:=option_bool servGood]}⌝ ∗
+    "Herr" ∷ (if decide (err ≠ ∅) then True else
+      ∃ γ,
+      "Hlocks" ∷ ([∗] replicate (Z.to_nat rwmutex.actualMaxReaders) (Auditor.lock_perm ptr_a γ)) ∗
+      "%Heq_servGood" ∷ ⌜γ.(cfg.serv_good) = servGood⌝ ∗
+
+      "#Hsl_sigPk" ∷ sl_sigPk ↦*□ γ.(cfg.adtr_sig_pk) ∗
+      "#His_sigPk" ∷ cryptoffi.is_sig_pk γ.(cfg.adtr_sig_pk)
+        (ktcore.sigpred γ.(cfg.sigpredγ)))
+  }}}.
+Proof.
+  wp_start as "@". wp_auto.
+  wp_apply (server.wp_Dial servGood) as "* @".
+  wp_apply server.wp_CallStart as "* @".
+  { iFrame "#". }
+  case_bool_decide as Heq_err; wp_auto;
+    rewrite ktcore.rw_Blame0 in Heq_err; subst.
+  2: {
+    iApply "HΦ".
+    iFrame "%".
+    by case_decide. }
+  case_decide; try done.
+  iNamed "Herr".
+  wp_apply wp_CheckStartChain as "* @".
+  { iFrame "#". }
+  wp_if_destruct.
+  { rewrite ktcore.rw_BlameServFull.
+    iApply "HΦ".
+    iSplit. 2: { by case_decide. }
+    iApply ktcore.blame_one.
+    iIntros (?).
+    case_match; try done.
+    iApply "Hgenie".
+    iNamed "Hgood".
+Admitted.
 
 End proof.
 End auditor.

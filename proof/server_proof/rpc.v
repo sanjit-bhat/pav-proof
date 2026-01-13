@@ -1,4 +1,4 @@
-From New.generatedproof.github_com.sanjit_bhat.pav Require Import server.
+From New.generatedproof.github_com.sanjit_bhat.pav Require Import advrpc server.
 From New.proof.github_com.sanjit_bhat.pav Require Import prelude.
 
 From New.proof.github_com.sanjit_bhat.pav Require Import
@@ -6,8 +6,6 @@ From New.proof.github_com.sanjit_bhat.pav Require Import
 
 From New.proof.github_com.sanjit_bhat.pav.server_proof Require Import
   serde server.
-
-Notation HistoryRpc := 2 (only parsing).
 
 (* notes:
 - BlameUnknown is like giving up.
@@ -27,38 +25,48 @@ Section proof.
 Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
 Context `{!pavG Σ}.
 
-Definition is_Server_rpc (s : loc) (good : option cfg.t) : iProp Σ :=
-  match good with None => True | Some γ => is_serv_inv γ end.
+(* TODO: make [is_rpc_cli] generic. currently, specialized to server. *)
+Definition is_rpc_cli (c : loc) (good : option cfg.t) : iProp Σ :=
+  match good with None => True | Some γ => is_inv γ end.
 
-#[global] Instance is_Server_rpc_pers s good : Persistent (is_Server_rpc s good).
+#[global] Instance is_rpc_cli_pers c good : Persistent (is_rpc_cli c good).
 Proof. apply _. Qed.
 
-Lemma wp_CallPut s good uid sl_pk pk ver :
+(* TODO: trusted good param. *)
+Lemma wp_Dial (good : option cfg.t) (addr : w64) :
+  {{{ is_pkg_init advrpc }}}
+  @! advrpc.Dial #addr
+  {{{
+    ptr_cli, RET #ptr_cli;
+    "#His_cli" ∷ is_rpc_cli ptr_cli good
+  }}}.
+Proof. Admitted.
+
+Lemma wp_CallPut c good uid sl_pk pk ver :
   {{{
     is_pkg_init server ∗
-    "#His_serv" ∷ is_Server_rpc s good ∗
+    "#His_cli" ∷ is_rpc_cli c good ∗
     "#Hsl_pk" ∷ sl_pk ↦*□ pk ∗
     "#His_put" ∷ match good with None => True | Some γ =>
       ∃ i uidγ,
       "%Hlook_uidγ" ∷ ⌜γ.(cfg.uidγ) !! uid = Some uidγ⌝ ∗
       "#Hidx" ∷ mono_list_idx_own uidγ i (ver, pk) end
   }}}
-  @! server.CallPut #s #uid #sl_pk #ver
+  @! server.CallPut #c #uid #sl_pk #ver
   {{{ RET #(); True }}}.
 Proof. Admitted.
 
 Lemma wp_History_cli_call (Q : cfg.t → state.t → iProp Σ)
-    s good sl_arg d0 arg ptr_reply (x : slice.t) :
+    c good sl_arg d0 arg ptr_reply (x : slice.t) :
   {{{
     is_pkg_init server ∗
-    (* TODO: overloading is_Server_rpc. *)
-    "#His_serv" ∷ is_Server_rpc s good ∗
+    "#His_cli" ∷ is_rpc_cli c good ∗
     "Hsl_arg" ∷ sl_arg ↦*{d0} arg ∗
     "Hptr_reply" ∷ ptr_reply ↦ x ∗
     "#Hfupd" ∷ match good with None => True | Some γ =>
-      □ (|={⊤,∅}=> ∃ σ, own_Server γ σ ∗ (own_Server γ σ ={∅,⊤}=∗ Q γ σ)) end
+      □ (|={⊤,∅}=> ∃ σ, own γ σ ∗ (own γ σ ={∅,⊤}=∗ Q γ σ)) end
   }}}
-  s @ (ptrT.id advrpc.Client.id) @ "Call" server.HistoryRpc #sl_arg #ptr_reply
+  c @ (ptrT.id advrpc.Client.id) @ "Call" server.HistoryRpc #sl_arg #ptr_reply
   {{{
     sl_reply err0, RET #err0;
     "Hsl_arg" ∷ sl_arg ↦*{d0} arg ∗
@@ -111,16 +119,16 @@ Lemma wp_History_cli_call (Q : cfg.t → state.t → iProp Σ)
 Proof. Admitted.
 
 Lemma wp_Audit_cli_call (Q : cfg.t → state.t → iProp Σ)
-    s good sl_arg d0 arg ptr_reply (x : slice.t) :
+    c good sl_arg d0 arg ptr_reply (x : slice.t) :
   {{{
     is_pkg_init server ∗
-    "#His_serv" ∷ is_Server_rpc s good ∗
+    "#His_cli" ∷ is_rpc_cli c good ∗
     "Hsl_arg" ∷ sl_arg ↦*{d0} arg ∗
     "Hptr_reply" ∷ ptr_reply ↦ x ∗
     "#Hfupd" ∷ match good with None => True | Some γ =>
-      □ (|={⊤,∅}=> ∃ σ, own_Server γ σ ∗ (own_Server γ σ ={∅,⊤}=∗ Q γ σ)) end
+      □ (|={⊤,∅}=> ∃ σ, own γ σ ∗ (own γ σ ={∅,⊤}=∗ Q γ σ)) end
   }}}
-  s @ (ptrT.id advrpc.Client.id) @ "Call" server.AuditRpc #sl_arg #ptr_reply
+  c @ (ptrT.id advrpc.Client.id) @ "Call" server.AuditRpc #sl_arg #ptr_reply
   {{{
     sl_reply err0, RET #err0;
     "Hsl_arg" ∷ sl_arg ↦*{d0} arg ∗
@@ -162,6 +170,44 @@ Lemma wp_Audit_cli_call (Q : cfg.t → state.t → iProp Σ)
           "#His_sig" ∷ ktcore.wish_LinkSig γ.(cfg.sig_pk) (W64 ep) link aud.(ktcore.AuditProof.LinkSig))
       end) end end
   }}}.
+Proof. Admitted.
+
+Lemma wp_CallStart c good :
+  {{{
+    is_pkg_init server ∗
+    "#His_cli" ∷ is_rpc_cli c good
+  }}}
+  @! server.CallStart #c
+  {{{
+    ptr_chain ptr_vrf err, RET (#ptr_chain, #ptr_vrf, #(ktcore.blame_to_u64 err));
+    "%Hblame" ∷ ⌜ktcore.BlameSpec err {[ktcore.BlameServFull:=option_bool good]}⌝ ∗
+    "#Herr" ∷ (if decide (err ≠ ∅) then True else
+      ∃ chain vrf,
+      "#Hptr_chain" ∷ StartChain.own ptr_chain chain (□) ∗
+      "#Hptr_vrf" ∷ StartVrf.own ptr_vrf vrf (□) ∗
+
+      "Hgood" ∷ match good with None => True | Some γ =>
+        ∃ servHist last_link,
+        let numEps := length servHist in
+        "#Hlb_servHist" ∷ mono_list_lb_own γ.(cfg.histγ) servHist ∗
+        "%Hnoof_eps" ∷ ⌜numEps = sint.nat (W64 $ numEps)⌝ ∗
+
+        "%His_PrevEpochLen" ∷ ⌜uint.nat chain.(StartChain.PrevEpochLen) < numEps⌝ ∗
+        "#His_PrevLink" ∷ hashchain.is_chain
+          (take (uint.nat chain.(StartChain.PrevEpochLen)) servHist.*1)
+          None chain.(StartChain.PrevLink)
+          (uint.nat chain.(StartChain.PrevEpochLen)) ∗
+        "%His_ChainProof" ∷ ⌜hashchain.wish_Proof chain.(StartChain.ChainProof)
+          (drop (uint.nat chain.(StartChain.PrevEpochLen)) servHist.*1)⌝ ∗
+        "#His_last_link" ∷ hashchain.is_chain servHist.*1 None
+          last_link numEps ∗
+        "#His_LinkSig" ∷ ktcore.wish_LinkSig γ.(cfg.sig_pk)
+          (W64 $ numEps - 1) last_link chain.(StartChain.LinkSig) ∗
+
+        "%Heq_VrfPk" ∷ ⌜γ.(cfg.vrf_pk) = vrf.(StartVrf.VrfPk)⌝ ∗
+        "#His_VrfSig" ∷ ktcore.wish_VrfSig γ.(cfg.sig_pk) γ.(cfg.vrf_pk)
+          vrf.(StartVrf.VrfSig) end)
+    }}}.
 Proof. Admitted.
 
 End proof.
