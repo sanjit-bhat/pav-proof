@@ -60,10 +60,13 @@ Section proof.
 Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
 Context `{!pavG Σ}.
 
-Definition own γ obj q : iProp Σ :=
+Definition own_aux γ obj q : iProp Σ :=
   "Hown_pend" ∷ ghost_var γ.(cfg.pendγ) (DfracOwn q) obj.(state.pending) ∗
   (* client remembers lb's of this. *)
   "Hown_hist" ∷ mono_list_auth_own γ.(cfg.histγ) q obj.(state.hist).
+
+(* other 1/2 in server lock inv. *)
+Definition own γ obj : iProp Σ := own_aux γ obj (1/2).
 
 Definition valid γ obj : iProp Σ :=
   "#Hperm_uids" ∷ ([∗ map] uid ↦ pks ∈ obj.(state.pending),
@@ -80,8 +83,7 @@ Definition valid γ obj : iProp Σ :=
   "%Hsub_hist" ∷ ⌜list_reln obj.(state.hist).*2 keys_sub⌝.
 
 Definition inv_aux γ obj : iProp Σ :=
-  (* other 1/2 in server lock inv. *)
-  "Hown_serv" ∷ own γ obj (1/2) ∗
+  "Hown_serv" ∷ own γ obj ∗
   "#His_serv" ∷ valid γ obj.
 
 #[global] Instance inv_aux_timeless γ obj : Timeless (inv_aux γ obj).
@@ -177,8 +179,8 @@ Lemma op_read γ i (a : list w8 * keys_ty) :
   is_inv γ -∗
   mono_list_idx_own γ.(cfg.histγ) i a -∗
   (|={⊤,∅}=>
-    ∃ obj, own γ obj (1/2) ∗
-      (own γ obj (1/2)
+    ∃ obj, own γ obj ∗
+      (own γ obj
         ={∅,⊤}=∗ Q_read γ i obj)).
 Proof.
   iIntros "#Hinv #Hidx".
@@ -218,9 +220,9 @@ Lemma op_put γ uid uidγ i ver pk :
   is_inv γ -∗
   ⌜γ.(cfg.uidγ) !! uid = Some uidγ⌝ -∗
   mono_list_idx_own uidγ i (ver, pk) -∗
-  □ (|={⊤,∅}=> ∃ obj, own γ obj (1/2) ∗
+  □ (|={⊤,∅}=> ∃ obj, own γ obj ∗
     (let obj' := set state.pending (pure_put uid ver pk) obj in
-    own γ obj' (1/2) ={∅,⊤}=∗ True)).
+    own γ obj' ={∅,⊤}=∗ True)).
 Proof.
   iIntros "#Hinv %Hlook_uidγ #Hmono_idx".
   iModIntro.
@@ -258,10 +260,10 @@ Qed.
 
 Lemma op_add_hist γ :
   is_inv γ -∗
-  □ (|={⊤,∅}=> ∃ obj, own γ obj (1/2) ∗
+  □ (|={⊤,∅}=> ∃ obj, own γ obj ∗
     ∀ dig,
     let obj' := set (state.hist) (.++ [(dig, obj.(state.pending))]) obj in
-    (own γ obj' (1/2) ={∅,⊤}=∗ True)).
+    (own γ obj' ={∅,⊤}=∗ True)).
 Proof.
   iIntros "#Hinv".
   iModIntro.
@@ -436,13 +438,13 @@ Definition own γ ptr obj q : iProp Σ :=
   "#His_workQ" ∷ simple.is_simple workQγ ptr_workQ (work.own_aux γ) ∗
 
   (* other 1/2 in server inv. *)
-  "Hown_gs" ∷ own γ obj (q/2) ∗
+  "Hown_gs" ∷ own_aux γ obj (q/2) ∗
   "%Heq_hist" ∷ ⌜obj.(state.hist).*1 = hist.(history.digs)⌝ ∗
   "%Heq_last_hist" ∷ ⌜last obj.(state.hist) = Some (lastDig, keys.(keyStore.plain))⌝ ∗
-  "#Hop_add_hist" ∷ □ (|={⊤,∅}=> ∃ obj, own γ obj (1/2) ∗
+  "#Hop_add_hist" ∷ □ (|={⊤,∅}=> ∃ obj, own γ obj ∗
     ∀ dig,
     let obj' := set (state.hist) (.++ [(dig, obj.(state.pending))]) obj in
-    (own γ obj' (1/2) ={∅,⊤}=∗ True)).
+    (own γ obj' ={∅,⊤}=∗ True)).
 
 Definition lock_perm γ ptr : iProp Σ :=
   ∃ ptr_mu,
@@ -465,9 +467,9 @@ Lemma wp_Server_Put s γ uid sl_pk pk ver :
     "#Hsl_pk" ∷ sl_pk ↦*□ pk ∗
     (* caller doesn't need anything from Put.
     and in fact, Put might logically execute *after* Put returns. *)
-    "#Hop_put" ∷ □ (|={⊤,∅}=> ∃ obj, own γ obj (1/2) ∗
+    "#Hop_put" ∷ □ (|={⊤,∅}=> ∃ obj, own γ obj ∗
       let obj' := set state.pending (pure_put uid ver pk) obj in
-      (own γ obj' (1/2) ={∅,⊤}=∗ True))
+      (own γ obj' ={∅,⊤}=∗ True))
   }}}
   s @ (ptrT.id server.Server.id) @ "Put" #uid #ver #sl_pk
   {{{
@@ -480,8 +482,8 @@ Lemma wp_Server_History s γ (uid prevEpoch prevVerLen : w64) Q :
   {{{
     is_pkg_init server ∗
     "Hlock" ∷ Server.lock_perm γ s ∗
-    "#Hop_read" ∷ □ (|={⊤,∅}=> ∃ obj, own γ obj (1/2) ∗
-      (own γ obj (1/2) ={∅,⊤}=∗ Q obj))
+    "#Hop_read" ∷ □ (|={⊤,∅}=> ∃ obj, own γ obj ∗
+      (own γ obj ={∅,⊤}=∗ Q obj))
   }}}
   s @ (ptrT.id server.Server.id) @ "History" #uid #prevEpoch #prevVerLen
   {{{
@@ -526,8 +528,8 @@ Lemma wp_Server_Audit s γ (prevEpoch : w64) Q :
   {{{
     is_pkg_init server ∗
     "Hlock" ∷ Server.lock_perm γ s ∗
-    "#Hop_read" ∷ □ (|={⊤,∅}=> ∃ obj, own γ obj (1/2) ∗
-      (own γ obj (1/2) ={∅,⊤}=∗ Q obj))
+    "#Hop_read" ∷ □ (|={⊤,∅}=> ∃ obj, own γ obj ∗
+      (own γ obj ={∅,⊤}=∗ Q obj))
   }}}
   s @ (ptrT.id server.Server.id) @ "Audit" #prevEpoch
   {{{
@@ -569,8 +571,8 @@ Lemma wp_Server_Start s γ Q :
   {{{
     is_pkg_init server ∗
     "Hlock" ∷ Server.lock_perm γ s ∗
-    "#Hop_read" ∷ □ (|={⊤,∅}=> ∃ obj, own γ obj (1/2) ∗
-      (own γ obj (1/2) ={∅,⊤}=∗ Q obj))
+    "#Hop_read" ∷ □ (|={⊤,∅}=> ∃ obj, own γ obj ∗
+      (own γ obj ={∅,⊤}=∗ Q obj))
   }}}
   s @ (ptrT.id server.Server.id) @ "Start" #()
   {{{
