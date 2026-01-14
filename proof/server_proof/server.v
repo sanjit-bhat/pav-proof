@@ -487,11 +487,49 @@ Definition lock_perm γ ptr : iProp Σ :=
 End proof.
 End Server.
 
-(** method specs. *)
-
 Section proof.
 Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
 Context `{!pavG Σ}.
+
+(** fetch-side helper funcs. *)
+
+Lemma wp_Server_getHist s γ obj (uid prefixLen : w64) q lastDig lastKeys :
+  {{{
+    is_pkg_init server ∗
+    "Hown" ∷ Server.own γ s obj q ∗
+    "%Hlast_hist" ∷ ⌜last obj.(state.hist) = Some (lastDig, lastKeys)⌝ ∗
+    "%Hpre_len" ∷ ⌜uint.nat prefixLen ≤ length (lastKeys !!! uid)⌝
+  }}}
+  s @ (ptrT.id server.Server.id) @ "getHist" #uid #prefixLen
+  {{{
+    sl_hist hist, RET #sl_hist;
+    let pks := lastKeys !!! uid in
+    "Hown" ∷ Server.own γ s obj q ∗
+    "#Hsl_hist" ∷ ktcore.MembSlice1D.own sl_hist hist (□) ∗
+    "#Hwish_hist" ∷ ktcore.wish_ListMemb γ.(cfg.vrf_pk) uid prefixLen lastDig hist ∗
+    "%Heq_hist" ∷ ⌜Forall2
+      (λ x y, x = y.(ktcore.Memb.PkOpen).(ktcore.CommitOpen.Val))
+      (drop (uint.nat prefixLen) pks) hist⌝
+  }}}.
+Proof. Admitted.
+
+Lemma wp_Server_getBound s γ obj (uid numVers : w64) q lastDig lastKeys :
+  {{{
+    is_pkg_init server ∗
+    "Hown" ∷ Server.own γ s obj q ∗
+    "%Hlast_hist" ∷ ⌜last obj.(state.hist) = Some (lastDig, lastKeys)⌝ ∗
+    "%Hpre_bound" ∷ ⌜uint.nat numVers = length (lastKeys !!! uid)⌝
+  }}}
+  s @ (ptrT.id server.Server.id) @ "getBound" #uid #numVers
+  {{{
+    ptr_bound bound, RET #ptr_bound;
+    "Hown" ∷ Server.own γ s obj q ∗
+    "#Hptr_bound" ∷ ktcore.NonMemb.own ptr_bound bound (□) ∗
+    "#Hwish_bound" ∷ ktcore.wish_NonMemb γ.(cfg.vrf_pk) uid numVers lastDig bound
+  }}}.
+Proof. Admitted.
+
+(** top-level methods. *)
 
 Lemma wp_Server_Put s γ uid sl_pk pk ver :
   {{{
