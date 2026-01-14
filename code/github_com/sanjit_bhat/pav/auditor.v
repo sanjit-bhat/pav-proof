@@ -175,8 +175,6 @@ Definition Auditor__updOnceⁱᵐᵖˡ : val :=
     slice.literal #ptrT ["$sl0"])) in
     (slice.append #ptrT) "$a0" "$a1") in
     do:  ((struct.field_ref #history #"epochs"%go (![#ptrT] "hist")) <-[#sliceT] "$r0");;;
-    let: "$r0" := (![#ptrT] "hist") in
-    do:  ((struct.field_ref #Auditor #"hist"%go (![#ptrT] "a")) <-[#ptrT] "$r0");;;
     return: (![#ktcore.Blame] "err")).
 
 Definition SignedVrf : go_type := structT [
@@ -198,7 +196,7 @@ Definition SignedLink : go_type := structT [
 (* Get returns the auditor's info for a particular epoch.
    it errors if the epoch is out of bounds.
 
-   go: auditor.go:87:19 *)
+   go: auditor.go:86:19 *)
 Definition Auditor__Getⁱᵐᵖˡ : val :=
   λ: "a" "epoch",
     with_defer: (let: "err" := (mem.alloc (type.zero_val #boolT)) in
@@ -261,7 +259,7 @@ Definition CheckStartVrf : go_string := "github.com/sanjit-bhat/pav/auditor.Chec
 
 Definition CheckStartChain : go_string := "github.com/sanjit-bhat/pav/auditor.CheckStartChain"%go.
 
-(* go: auditor.go:109:6 *)
+(* go: auditor.go:108:6 *)
 Definition Newⁱᵐᵖˡ : val :=
   λ: "servAddr" "servPk",
     exception_do (let: "err" := (mem.alloc (type.zero_val #ktcore.Blame)) in
@@ -390,7 +388,7 @@ Definition Newⁱᵐᵖˡ : val :=
 
 Definition getNextDig : go_string := "github.com/sanjit-bhat/pav/auditor.getNextDig"%go.
 
-(* go: auditor.go:137:6 *)
+(* go: auditor.go:136:6 *)
 Definition getNextLinkⁱᵐᵖˡ : val :=
   λ: "sigPk" "prevEp" "prevDig" "prevLink" "p",
     exception_do (let: "err" := (mem.alloc (type.zero_val #boolT)) in
@@ -438,7 +436,7 @@ Definition getNextLinkⁱᵐᵖˡ : val :=
     else do:  #());;;
     return: (![#uint64T] "ep", ![#sliceT] "dig", ![#sliceT] "link", ![#boolT] "err")).
 
-(* go: auditor.go:154:6 *)
+(* go: auditor.go:153:6 *)
 Definition getNextDigⁱᵐᵖˡ : val :=
   λ: "prevDig" "updates",
     exception_do (let: "err" := (mem.alloc (type.zero_val #boolT)) in
@@ -479,7 +477,7 @@ Definition getNextDigⁱᵐᵖˡ : val :=
       do:  ("dig" <-[#sliceT] "$r0")));;;
     return: (![#sliceT] "dig", ![#boolT] "err")).
 
-(* go: auditor.go:171:6 *)
+(* go: auditor.go:170:6 *)
 Definition CheckStartChainⁱᵐᵖˡ : val :=
   λ: "servPk" "chain",
     exception_do (let: "err" := (mem.alloc (type.zero_val #boolT)) in
@@ -542,7 +540,7 @@ Definition CheckStartChainⁱᵐᵖˡ : val :=
     else do:  #());;;
     return: (![#uint64T] "ep", ![#sliceT] "dig", ![#sliceT] "link", ![#boolT] "err")).
 
-(* go: auditor.go:198:6 *)
+(* go: auditor.go:197:6 *)
 Definition CheckStartVrfⁱᵐᵖˡ : val :=
   λ: "servPk" "vrf",
     exception_do (let: "err" := (mem.alloc (type.zero_val #boolT)) in

@@ -15,6 +15,73 @@ From New.proof.github_com.sanjit_bhat.pav Require Import prelude.
 Module auditor.
 Import base.auditor rpc.auditor serde.auditor.
 
+Section proof.
+Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
+Context `{!pavG Σ}.
+
+Definition own_aux γ σ q : iProp Σ :=
+  "#Hgs_start_ep" ∷ ghost_var γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.start_ep)
+    (□) σ.(state.start_ep) ∗
+  (* 1/2 in lock inv, 1/2 in GS inv. *)
+  "Hgs_links" ∷ mono_list_auth_own γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.links)
+    (q/2) σ.(state.links).
+
+Definition own γ σ : iProp Σ := own_aux γ σ 1.
+
+Definition is_inv γ := inv nroot (∃ σ, own γ σ).
+
+#[global]
+Instance own_timeless γ σ : Timeless (own γ σ).
+Proof. apply _. Qed.
+
+#[global]
+Instance own_aux_frac γ σ :
+  fractional.Fractional (λ q, own_aux γ σ q).
+Proof.
+  intros ??. iSplit.
+  - iIntros "@".
+    rewrite Qp.div_add_distr.
+    iDestruct "Hgs_links" as "[? ?]".
+    iFrame "∗#".
+  - iIntros "[H0 H1]".
+    iNamedSuffix "H0" "0".
+    iNamedSuffix "H1" "1".
+    iCombine "Hgs_links0 Hgs_links1" as "?".
+    rewrite -Qp.div_add_distr.
+    iFrame "∗#".
+Qed.
+
+#[global]
+Instance own_aux_as_frac γ σ q :
+  fractional.AsFractional (own_aux γ σ q) (λ q, own_aux γ σ q) q.
+Proof. auto. Qed.
+
+#[global]
+Instance own_aux_combine_sep_gives γ σ0 σ1 q0 q1 :
+  CombineSepGives (own_aux γ σ0 q0) (own_aux γ σ1 q1) (⌜σ0 = σ1⌝).
+Proof.
+  rewrite /CombineSepGives.
+  iIntros "[H0 H1]".
+  iNamedSuffix "H0" "0".
+  iNamedSuffix "H1" "1".
+  iCombine "Hgs_start_ep0 Hgs_start_ep1" gives %[? ?].
+  iDestruct (mono_list_auth_own_agree with "Hgs_links0 Hgs_links1") as %[? ?].
+  iModIntro.
+  destruct σ0, σ1. by simplify_eq/=.
+Qed.
+
+#[global]
+Instance own_aux_combine_sep_as γ σ0 σ1 q0 q1 :
+  CombineSepAs (own_aux γ σ0 q0) (own_aux γ σ1 q1) (own_aux γ σ0 (q0 + q1)) | 60.
+Proof.
+  rewrite /CombineSepAs.
+  iIntros "[H0 H1]".
+  iCombine "H0 H1" gives %->.
+  by iCombine "H0 H1" as "H".
+Qed.
+
+End proof.
+
 Module serv.
 Section proof.
 Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
@@ -54,16 +121,15 @@ Context `{!pavG Σ}.
 
 Definition own ptr obj γ σ q : iProp Σ :=
   ∃ ptr_sk ptr_hist ptr_serv maps,
-  (* separate struct fields bc "mu" contained in lock perm. *)
   "#Hfld_sk" ∷ ptr ↦s[auditor.Auditor::"sk"]□ ptr_sk ∗
-  "Hfld_hist" ∷ ptr ↦s[auditor.Auditor::"hist"]{#q} ptr_hist ∗
+  "#Hfld_hist" ∷ ptr ↦s[auditor.Auditor::"hist"]□ ptr_hist ∗
   "#Hfld_serv" ∷ ptr ↦s[auditor.Auditor::"serv"]□ ptr_serv ∗
 
   "#Hown_sk" ∷ cryptoffi.own_sig_sk ptr_sk γ.(cfg.adtr_sig_pk)
     (ktcore.sigpred γ.(cfg.sigpredγ)) ∗
 
   "Hown_hist" ∷ history.own ptr_hist obj.(hist) γ σ q ∗
-  "Hown_gs_hist" ∷ history.own_gs γ σ q ∗
+  "Hown_gs_hist" ∷ own_aux γ σ q ∗
   "#Hinv_sigpred" ∷ ktcore.sigpred_links_inv σ.(state.start_ep) σ.(state.links)
     obj.(hist).(history.digs) obj.(hist).(history.cut) maps ∗
   "#Halign_hist" ∷ match γ.(cfg.serv_good) with None => True | Some servγ =>
@@ -77,6 +143,34 @@ Definition lock_perm ptr γ : iProp Σ :=
   ∃ ptr_mu,
   "#Hfld_mu" ∷ ptr ↦s[auditor.Auditor::"mu"]□ ptr_mu ∗
   "Hperm" ∷ own_RWMutex ptr_mu (λ q, ∃ adtr σ, own ptr adtr γ σ q).
+
+#[global]
+Instance own_frac ptr obj γ σ :
+  fractional.Fractional (λ q, own ptr obj γ σ q).
+Proof.
+  rewrite /own. intros ??. iSplit.
+  - iIntros "@".
+    iDestruct "Hown_hist" as "[? ?]".
+    (* TODO: why needed? *)
+    Typeclasses Opaque own_aux.
+    iDestruct "Hown_gs_hist" as "[? ?]".
+    iFrame "#∗".
+  - iIntros "[H0 H1]".
+    iNamedSuffix "H0" "0".
+    iNamedSuffix "H1" "1".
+    iCombine "Hfld_sk0 Hfld_sk1" gives %[? ?].
+    iCombine "Hfld_hist0 Hfld_hist1" gives %[? ?].
+    iCombine "Hfld_serv0 Hfld_serv1" gives %[? ?].
+    simplify_eq/=.
+    iCombine "Hown_hist0 Hown_hist1" as "?".
+    iCombine "Hown_gs_hist0 Hown_gs_hist1" as "?".
+    iFrame "#∗".
+Qed.
+
+#[global]
+Instance own_as_frac ptr obj γ σ q :
+  fractional.AsFractional (own ptr obj γ σ q) (λ q, own ptr obj γ σ q) q.
+Proof. auto. Qed.
 
 End proof.
 End Auditor.
@@ -368,36 +462,12 @@ Definition wish_SignedVrf servPk adtrPk vrf : iProp Σ :=
   "#Hwish_serv_sig" ∷ ktcore.wish_VrfSig servPk
     vrf.(SignedVrf.VrfPk) vrf.(SignedVrf.ServSig).
 
-Definition own_Auditor γ σ : iProp Σ :=
-  (* Auditor state lines up with sigpred state. *)
-  "#Hgs_start_ep" ∷ ghost_var γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.start_ep)
-    (□) σ.(state.start_ep) ∗
-  (* other 1/2 in lock inv. *)
-  "Hgs_links" ∷ mono_list_auth_own γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.links)
-    (1/2) σ.(state.links).
-
-Definition is_adtr_inv γ := inv nroot (∃ σ, own_Auditor γ σ).
-
-Lemma unify_adtr_gs γ σ σ' q :
-  history.own_gs γ σ q -∗
-  own_Auditor γ σ' -∗
-  ⌜σ' = σ⌝.
-Proof.
-  rewrite /own_Auditor.
-  iNamedSuffix 1 "0".
-  iNamedSuffix 1 "1".
-  iDestruct (ghost_var_agree with "Hgs_start_ep0 Hgs_start_ep1") as %?.
-  iDestruct (mono_list_auth_own_agree with "Hgs_links0 Hgs_links1") as %[_ ?].
-  destruct σ, σ'.
-  by simplify_eq/=.
-Qed.
-
 Lemma wp_Auditor_Get a γ epoch Q :
   {{{
     is_pkg_init auditor ∗
     "Hlock" ∷ Auditor.lock_perm a γ ∗
-    "#Hfupd" ∷ □ (|={⊤,∅}=> ∃ σ, own_Auditor γ σ ∗
-      (own_Auditor γ σ ={∅,⊤}=∗ Q σ))
+    "#Hfupd" ∷ □ (|={⊤,∅}=> ∃ σ, own γ σ ∗
+      (own γ σ ={∅,⊤}=∗ Q σ))
   }}}
   a @ (ptrT.id auditor.Auditor.id) @ "Get" #epoch
   {{{
@@ -429,7 +499,7 @@ Proof.
   iNamed "H". iNamed "Hown_hist". wp_auto.
   iApply ncfupd_wp.
   iMod "Hfupd" as "(%&Hadtr&Hfupd)".
-  iDestruct (unify_adtr_gs with "Hown_gs_hist Hadtr") as %->.
+  iCombine "Hadtr Hown_gs_hist" gives %->.
   iMod ("Hfupd" with "Hadtr") as "HQ".
   iModIntro.
 
@@ -474,10 +544,10 @@ Lemma wp_Auditor_updOnce ptr_a a γ σ Q ptr_proof proof :
   {{{
     is_pkg_init auditor ∗
     "Hadtr" ∷ Auditor.own ptr_a a γ σ 1 ∗
-    "#Hfupd" ∷ □ (|={⊤,∅}=> ∃ σ, own_Auditor γ σ ∗
+    "#Hfupd" ∷ □ (|={⊤,∅}=> ∃ σ, own γ σ ∗
       (∀ new_links,
       let σ' := set state.links (.++ new_links) σ in
-      own_Auditor γ σ' ={∅,⊤}=∗ Q σ')) ∗
+      own γ σ' ={∅,⊤}=∗ Q σ')) ∗
 
     "#Hproof" ∷ ktcore.AuditProof.own ptr_proof proof (□) ∗
     "Hgood" ∷ match γ.(cfg.serv_good) with None => True | Some servγ =>
@@ -537,7 +607,7 @@ Proof.
   rewrite -wp_fupd.
   wp_if_destruct.
   { iMod "Hfupd" as "(%&Hadtr&Hfupd)".
-    iDestruct (unify_adtr_gs with "Hown_gs_hist Hadtr") as %->.
+    iCombine "Hadtr Hown_gs_hist" gives %->.
     destruct σ.
     iSpecialize ("Hfupd" $! []).
     list_simplifier.
@@ -563,12 +633,12 @@ Proof.
   { iExactEq "His_link_n". f_equal. word. }
   rewrite -ncfupd_wp.
   iMod "Hfupd" as "(%&Hadtr&Hfupd)".
-  iDestruct (unify_adtr_gs with "Hown_gs_hist Hadtr") as %->.
+  iCombine "Hadtr Hown_gs_hist" gives %->.
   destruct σ.
   iSpecialize ("Hfupd" $! [link]).
   simpl in *.
   iNamedSuffix "Hown_gs_hist" "0".
-  iEval (rewrite /own_Auditor) in "Hadtr".
+  iEval (rewrite /own) in "Hadtr".
   iNamedSuffix "Hadtr" "1".
   simpl in *.
   iCombine "Hgs_links0 Hgs_links1" as "Hgs_links".
@@ -585,7 +655,7 @@ Proof.
   iNamedSuffix "H" "_my".
   wp_apply wp_alloc as "* Hstr_epoch_n".
   iPersist "Hstr_epoch_n".
-  wp_apply wp_slice_literal as "* Hsl_tmp".
+  wp_apply wp_slice_literal as "* [Hsl_tmp _]".
   wp_apply (wp_slice_append with "[$Hsl_epochs $Hcap_epochs $Hsl_tmp]")
     as "* (Hsl_epochs&Hcap_epochs&_)".
   iModIntro.
@@ -617,10 +687,10 @@ Lemma wp_Auditor_Update ptr_a γ Q :
     "Hlock" ∷ Auditor.lock_perm ptr_a γ ∗
     (* pers fupd so that Auditor can add mult links,
     or even run Update as a background thread. *)
-    "#Hfupd" ∷ □ (|={⊤,∅}=> ∃ σ, own_Auditor γ σ ∗
+    "#Hfupd" ∷ □ (|={⊤,∅}=> ∃ σ, own γ σ ∗
       (∀ new_links,
       let σ' := set state.links (.++ new_links) σ in
-      own_Auditor γ σ' ={∅,⊤}=∗ Q σ'))
+      own γ σ' ={∅,⊤}=∗ Q σ'))
   }}}
   ptr_a @ (ptrT.id auditor.Auditor.id) @ "Update" #()
   {{{
@@ -652,7 +722,7 @@ Proof.
   rewrite -ncfupd_wp.
   iPoseProof "Hfupd" as "H".
   iMod "H" as "(%&Hadtr&Hclose)".
-  iDestruct (unify_adtr_gs with "Hown_gs_hist Hadtr") as %->.
+  iCombine "Hadtr Hown_gs_hist" gives %->.
   destruct σ.
   iSpecialize ("Hclose" $! []).
   list_simplifier.
@@ -668,7 +738,7 @@ Proof.
   case_decide; try done.
   iNamed "Herr".
 
-  iPersist "Hdefer a upd".
+  iPersist "Hdefer a".
   iAssert (
     ∃ (i : w64) (a0 : loc) a σ,
     "i" ∷ i_ptr ↦ i ∗
@@ -734,8 +804,7 @@ Proof.
   iNamed "Herr".
   wp_for_post.
   iFrame.
-  simpl.
-  len.
+  simpl. len.
 Qed.
 
 Lemma wp_New servGood (servAddr : w64) sl_servPk servPk :
@@ -804,13 +873,14 @@ Proof.
   iNamed "Hgenie".
 
   wp_apply wp_alloc as "* Hmu".
-  iMod (ghost_var_alloc vrf.(server.StartVrf.VrfPk)) as (vrfγ) "H".
-  iMod (ghost_var_persist with "H") as "#Hshot_vrf".
-  iMod (ghost_var_alloc ep) as (start_epγ) "H".
-  iMod (ghost_var_persist with "H") as "#Hshot_start_ep".
+  iMod (ghost_var_alloc vrf.(server.StartVrf.VrfPk)) as (vrfγ) "Hshot_vrf".
+  iPersist "Hshot_vrf".
+  iMod (ghost_var_alloc ep) as (start_epγ) "Hshot_start_ep".
+  iPersist "Hshot_start_ep".
   iMod (mono_list_own_alloc [link]) as (linksγ) "[Hauth_links #Hlb_links]".
   wp_apply (cryptoffi.wp_SigGenerateKey
     (ktcore.sigpred (ktcore.sigpred_cfg.mk vrfγ start_epγ linksγ))) as "* @".
+  iPersist "Hsl_sigPk".
   iDestruct (merkle.is_map_invert dig) as (m) "#His_map"; [word|].
   iNamed "Hptr_chain".
   wp_apply ktcore.wp_SignLink as "* @".
@@ -832,10 +902,27 @@ Proof.
       by rewrite -last_lookup last_app Heq_dig. }
   wp_apply wp_alloc as "* Hptr_info".
   iPersist "Hptr_info".
-  wp_apply wp_slice_literal as "* Hsl_epochs".
+  wp_apply wp_slice_literal as "* [Hsl_epochs Hcap_epochs]".
+  iNamed "Hptr_vrf".
   wp_apply wp_alloc as "* Hptr_hist".
+  wp_apply ktcore.wp_SignVrf as "* @".
+  { iFrame "#". }
+  wp_apply wp_alloc as "* Hptr_serv".
+  rewrite -wp_fupd.
+  wp_apply wp_alloc as "%ptr_a Hptr_adtr".
+  iPersist "Hptr_hist Hptr_serv Hptr_adtr".
+  iDestruct (struct_fields_split with "Hptr_adtr") as "{Hptr_adtr} H".
+  iNamedSuffix "H" "_fld".
+  simpl in *.
 
-
+  remember (ktcore.sigpred_cfg.mk _ _ _) as sigpredγ.
+  iDestruct (init_RWMutex
+    (Auditor.own
+      ptr_a
+      (Auditor.mk' (history.mk' digs cut))
+      (cfg.mk servPk sigPk sigpredγ vrf.(server.StartVrf.VrfPk) servGood)
+      (state.mk ep [link]))
+    with "[] [-HΦ Hmu] Hmu") as "H".
 Admitted.
 
 End proof.

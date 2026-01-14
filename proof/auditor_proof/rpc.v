@@ -75,19 +75,37 @@ Definition own ptr obj γ σ q : iProp Σ :=
   "%Hinb_ep" ∷ ⌜uint.Z σ.(state.start_ep) + length σ.(state.links) - 1 =
     uint.Z last_ep⌝.
 
-Definition own_gs γ σ q : iProp Σ :=
-  "#Hgs_start_ep" ∷ ghost_var γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.start_ep)
-    (□) σ.(state.start_ep) ∗
-  (* 1/2 own in fupd inv. *)
-  "Hgs_links" ∷ mono_list_auth_own γ.(cfg.sigpredγ).(ktcore.sigpred_cfg.links)
-    (q/2) σ.(state.links).
-
 Definition align_serv obj σ servγ : iProp Σ :=
   ∃ hist,
   "#His_hist" ∷ mono_list_lb_own servγ.(server.cfg.histγ) hist ∗
   "%Heq_ep" ∷ ⌜length hist = (uint.nat σ.(state.start_ep) + length σ.(state.links))%nat⌝ ∗
   "%Heq_digs" ∷ ⌜obj.(digs) = hist.*1⌝ ∗
   "%Heq_cut" ∷ ⌜obj.(cut) = None⌝.
+
+#[global]
+Instance own_frac ptr obj γ σ :
+  fractional.Fractional (λ q, own ptr obj γ σ q).
+Proof.
+  rewrite /own. intros ??. iSplit.
+  - iIntros "@".
+    iDestruct "Hstr_history" as "[? ?]".
+    iDestruct "Hsl_epochs" as "[? ?]".
+    iDestruct "Hcap_epochs" as "[? ?]".
+    iFrame "∗#%".
+  - iIntros "[H0 H1]".
+    iNamedSuffix "H0" "0".
+    iNamedSuffix "H1" "1".
+    iCombine "Hstr_history0 Hstr_history1" as "?" gives %[? ?].
+    simplify_eq/=.
+    iCombine "Hsl_epochs0 Hsl_epochs1" as "?" gives %?.
+    iCombine "Hcap_epochs0 Hcap_epochs1" as "?".
+    iFrame "∗#%".
+Qed.
+
+#[global]
+Instance own_as_frac ptr obj γ σ q :
+  fractional.AsFractional (own ptr obj γ σ q) (λ q, own ptr obj γ σ q) q.
+Proof. auto. Qed.
 
 End proof.
 End history.
