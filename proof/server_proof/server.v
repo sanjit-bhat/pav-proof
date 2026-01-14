@@ -171,19 +171,19 @@ Qed.
 
 (** state transition ops. *)
 
-Definition Q_read γ i obj : iProp Σ :=
+Definition Q_read_lb prev_lb γ obj : iProp Σ :=
   mono_list_lb_own γ.(cfg.histγ) obj.(state.hist) ∗
-  ⌜i < length obj.(state.hist)⌝.
+  ⌜prev_lb `prefix_of` obj.(state.hist)⌝.
 
-Lemma op_read γ i (a : list w8 * keys_ty) :
+Lemma op_read_lb γ prev_lb :
   is_inv γ -∗
-  mono_list_idx_own γ.(cfg.histγ) i a -∗
+  mono_list_lb_own γ.(cfg.histγ) prev_lb -∗
   (|={⊤,∅}=>
     ∃ obj, own γ obj ∗
       (own γ obj
-        ={∅,⊤}=∗ Q_read γ i obj)).
+        ={∅,⊤}=∗ Q_read_lb prev_lb γ obj)).
 Proof.
-  iIntros "#Hinv #Hidx".
+  iIntros "#Hinv #Hlb".
   rewrite /is_inv.
   iInv "Hinv" as ">@" "Hclose".
   iApply fupd_mask_intro.
@@ -192,9 +192,42 @@ Proof.
   iFrame.
   iIntros "@".
   iMod "Hmask" as "_".
-  iDestruct (mono_list_lb_own_get with "Hown_hist") as "#Hlb".
-  iDestruct (mono_list_auth_idx_lookup with "Hown_hist Hidx") as %?%lookup_lt_Some.
-  iMod ("Hclose" with "[-]") as "_"; iFrame "∗#". word.
+  iDestruct (mono_list_lb_own_get with "Hown_hist") as "#Hlb'".
+  iDestruct (mono_list_auth_lb_valid with "Hown_hist Hlb") as %[_ ?].
+  iMod ("Hclose" with "[-]") as "_".
+  - iFrame "∗#".
+  - by iFrame "#%".
+Qed.
+
+Definition Q_read_idx prev_idx γ obj : iProp Σ :=
+  mono_list_lb_own γ.(cfg.histγ) obj.(state.hist) ∗
+  ⌜prev_idx < length obj.(state.hist)⌝.
+
+(* op_read_idx necessary, even tho weaker than op_read_lb.
+cli_call takes in curried Q_read, since it's used in both pre and post.
+at currying time, not under good flag, so client doesn't have prev_lb.
+but it does have have prev_idx!
+that's an arg to, e.g., CallHistory, independent of good-ness. *)
+Lemma op_read_idx γ prev_idx (a : list w8 * keys_ty) :
+  is_inv γ -∗
+  mono_list_idx_own γ.(cfg.histγ) prev_idx a -∗
+  (|={⊤,∅}=>
+    ∃ obj, own γ obj ∗
+      (own γ obj
+        ={∅,⊤}=∗ Q_read_idx prev_idx γ obj)).
+Proof.
+  iIntros "#Hinv #Hidx".
+  iDestruct "Hidx" as "(%&%Hlook&Hlb)".
+  iMod (op_read_lb with "Hinv Hlb") as "{Hlb} (%&Hown&Hfupd)".
+  iModIntro.
+  iFrame.
+  iIntros "Hown".
+  iMod ("Hfupd" with "Hown") as "(Hlb&%Hpref)".
+  iModIntro.
+  iFrame "Hlb".
+  apply lookup_lt_Some in Hlook.
+  apply prefix_length in Hpref.
+  word.
 Qed.
 
 Definition pure_put uid (ver : w64) pk (pend : keys_ty) :=
@@ -598,6 +631,7 @@ Lemma wp_Server_Start s γ Q :
       (W64 $ numEps - 1) last_link chain.(StartChain.LinkSig) ∗
 
     "%Heq_VrfPk" ∷ ⌜γ.(cfg.vrf_pk) = vrf.(StartVrf.VrfPk)⌝ ∗
+    "#His_VrfPk" ∷ cryptoffi.is_vrf_pk vrf.(StartVrf.VrfPk) ∗
     "#His_VrfSig" ∷ ktcore.wish_VrfSig γ.(cfg.sig_pk) γ.(cfg.vrf_pk)
       vrf.(StartVrf.VrfSig)
   }}}.
