@@ -156,10 +156,11 @@ Lemma wp_SigGenerateKey P :
   {{{ is_pkg_init cryptoffi }}}
   @! cryptoffi.SigGenerateKey #()
   {{{
-    (sl_pk : cryptoffi.SigPublicKey.t) pk ptr_sk, RET (#sl_pk, #ptr_sk);
-    "Hsl_sig_pk" ∷ sl_pk ↦* pk ∗
-    "#His_sig_pk" ∷ is_sig_pk pk P ∗
-    "#Hown_sig_sk" ∷ own_sig_sk ptr_sk pk P
+    (sl_sigPk : cryptoffi.SigPublicKey.t) sigPk ptr_sigSk,
+    RET (#sl_sigPk, #ptr_sigSk);
+    "Hsl_sigPk" ∷ sl_sigPk ↦* sigPk ∗
+    "#His_sig_pk" ∷ is_sig_pk sigPk P ∗
+    "#Hown_sig_sk" ∷ own_sig_sk ptr_sigSk sigPk P
  }}}.
 Proof. Admitted.
 
@@ -280,9 +281,10 @@ Lemma wp_VrfGenerateKey :
   {{{ is_pkg_init cryptoffi }}}
   @! cryptoffi.VrfGenerateKey #()
   {{{
-    (ptr_pk ptr_sk : loc) (pk : list w8), RET (#ptr_pk, #ptr_sk);
-    "#Hown_vrf_pk" ∷ own_vrf_pk ptr_pk pk ∗
-    "#Hown_vrf_sk" ∷ own_vrf_sk ptr_sk pk
+    (ptr_vrfPk ptr_vrfSk : loc) (vrfPk : list w8),
+    RET (#ptr_vrfPk, #ptr_vrfSk);
+    "#Hown_vrf_pk" ∷ own_vrf_pk ptr_vrfPk vrfPk ∗
+    "#Hown_vrf_sk" ∷ own_vrf_sk ptr_vrfSk vrfPk
   }}}.
 Proof. Admitted.
 

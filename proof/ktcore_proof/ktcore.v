@@ -29,9 +29,9 @@ Lemma wp_SignVrf ptr_sk pk γ sl_vrfPk vrfPk :
   }}}
   @! ktcore.SignVrf #ptr_sk #sl_vrfPk
   {{{
-    sl_sig sig, RET #sl_sig;
-    "#Hsl_sig" ∷ sl_sig ↦*□ sig ∗
-    "#Hwish_VrfSig" ∷ wish_VrfSig pk vrfPk sig
+    sl_vrfSig vrfSig, RET #sl_vrfSig;
+    "#Hsl_vrfSig" ∷ sl_vrfSig ↦*□ vrfSig ∗
+    "#Hwish_VrfSig" ∷ wish_VrfSig pk vrfPk vrfSig
   }}}.
 Proof.
   simpl. wp_start as "@". wp_auto.
@@ -107,9 +107,9 @@ Lemma wp_SignLink ptr_sk pk γ epoch sl_link link :
   }}}
   @! ktcore.SignLink #ptr_sk #epoch #sl_link
   {{{
-    sl_sig sig, RET #sl_sig;
-    "#Hsl_sig" ∷ sl_sig ↦*□ sig ∗
-    "#Hwish_LinkSig" ∷ wish_LinkSig pk epoch link sig
+    sl_linkSig linkSig, RET #sl_linkSig;
+    "#Hsl_linkSig" ∷ sl_linkSig ↦*□ linkSig ∗
+    "#Hwish_LinkSig" ∷ wish_LinkSig pk epoch link linkSig 
   }}}.
 Proof.
   simpl. wp_start as "@". wp_auto.
