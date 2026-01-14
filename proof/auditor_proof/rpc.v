@@ -63,7 +63,8 @@ Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}
 Context `{!pavG Σ}.
 
 Definition own ptr obj γ σ q : iProp Σ :=
-  ∃ sl_lastDig lastDig sl_epochs sl0_epochs (last_ep : w64),
+  ∃ sl_lastDig lastDig sl_epochs sl0_epochs,
+  let last_ep := uint.Z σ.(state.start_ep) + length σ.(state.links) - 1 in
   "Hstr_history" ∷ ptr ↦{#q} (auditor.history.mk sl_lastDig σ.(state.start_ep) sl_epochs) ∗
   "#Hsl_lastDig" ∷ sl_lastDig ↦*□ lastDig ∗
   "%Heq_lastDig" ∷ ⌜last obj.(digs) = Some lastDig⌝ ∗
@@ -72,8 +73,7 @@ Definition own ptr obj γ σ q : iProp Σ :=
   "#Hepochs" ∷ ([∗ list] idx ↦ p;o ∈ sl0_epochs;σ.(state.links),
     epoch.own p (epoch.mk' o) (uint.nat σ.(state.start_ep) + idx) γ) ∗
   "%Hsome_links" ∷ ⌜length σ.(state.links) > 0⌝ ∗
-  "%Hinb_ep" ∷ ⌜uint.Z σ.(state.start_ep) + length σ.(state.links) - 1 =
-    uint.Z last_ep⌝.
+  "%Hnoof_ep" ∷ ⌜last_ep = uint.Z $ W64 last_ep⌝.
 
 Definition align_serv obj σ servγ : iProp Σ :=
   ∃ hist,

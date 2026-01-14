@@ -198,8 +198,7 @@ Lemma wp_CheckStartChain sl_servPk servPk ptr_chain chain :
         "#Hsl_dig" ∷ sl_dig ↦*□ dig ∗
         "#Hsl_link" ∷ sl_link ↦*□ link ∗
         "#Hwish_CheckStartChain" ∷ server.wish_CheckStartChain servPk chain
-          digs cut ep dig link ∗
-        "%Hlen_dig" ∷ ⌜length dig = Z.to_nat $ cryptoffi.hash_len⌝
+          digs cut ep dig link
       end
   }}}.
 Proof.
@@ -251,9 +250,7 @@ Proof.
   { exfalso. simpl in *. word. }
   rewrite last_snoc /=.
   autorewrite with len in *.
-  repeat split; [word|].
-  destruct Hwish_chain as [Hlen_digs ?].
-  by apply Forall_snoc in Hlen_digs as [? ?].
+  repeat split. word.
 Qed.
 
 Lemma wp_CheckStartVrf sl_servPk servPk ptr_vrf vrf :
@@ -807,6 +804,12 @@ Proof.
   simpl. len.
 Qed.
 
+Lemma init_RWMutex P {E} (rw : loc) `{!fractional.Fractional P} :
+  ▷ P 1%Qp -∗
+  rw ↦ (default_val sync.RWMutex.t) ={E}=∗
+  [∗] replicate (Z.to_nat rwmutex.actualMaxReaders) (own_RWMutex rw P).
+Proof. Admitted.
+
 Lemma wp_New servGood (servAddr : w64) sl_servPk servPk :
   {{{
     is_pkg_init auditor ∗
@@ -823,6 +826,7 @@ Lemma wp_New servGood (servAddr : w64) sl_servPk servPk :
       {[ktcore.BlameServFull:=option_bool servGood]}⌝ ∗
     "Herr" ∷ (if decide (err ≠ ∅) then True else
       ∃ γ,
+      "#His_inv" ∷ is_inv γ ∗
       "Hlocks" ∷ ([∗] replicate (Z.to_nat rwmutex.actualMaxReaders) (Auditor.lock_perm ptr_a γ)) ∗
       "%Heq_servGood" ∷ ⌜γ.(cfg.serv_good) = servGood⌝ ∗
 
@@ -883,11 +887,8 @@ Proof.
   iPersist "Hsl_sigPk".
   iDestruct (merkle.is_map_invert dig) as (m) "#His_map"; [word|].
   iNamed "Hptr_chain".
-  wp_apply ktcore.wp_SignLink as "* @".
-  { iFrame "#".
-    iExists digs, cut, [m].
-    iSplit. { by replace (_ - _)%nat with 0%nat by word. }
-    rewrite /ktcore.sigpred_links_inv /=.
+  iAssert (ktcore.sigpred_links_inv ep [link] digs cut [m])%I as "#Hinv_sigpred".
+  { rewrite /ktcore.sigpred_links_inv /=.
     iNamed "Hwish_CheckStartChain".
     simplify_eq/=.
     iFrame "#".
@@ -900,9 +901,11 @@ Proof.
       rewrite take_ge; [done|len].
     - replace (_ + _ - _ + _)%nat with (pred $ length (digs0 ++ digs1)); [|len].
       by rewrite -last_lookup last_app Heq_dig. }
+  wp_apply ktcore.wp_SignLink as "* @".
+  { iFrame "#". by replace (_ - _)%nat with 0%nat by word. }
   wp_apply wp_alloc as "* Hptr_info".
   iPersist "Hptr_info".
-  wp_apply wp_slice_literal as "* [Hsl_epochs Hcap_epochs]".
+  unshelve (wp_apply wp_slice_literal as "* [Hsl_epochs Hcap_epochs]"); [apply _|].
   iNamed "Hptr_vrf".
   wp_apply wp_alloc as "* Hptr_hist".
   wp_apply ktcore.wp_SignVrf as "* @".
@@ -910,19 +913,27 @@ Proof.
   wp_apply wp_alloc as "* Hptr_serv".
   rewrite -wp_fupd.
   wp_apply wp_alloc as "%ptr_a Hptr_adtr".
-  iPersist "Hptr_hist Hptr_serv Hptr_adtr".
+  iPersist "Hptr_serv Hptr_adtr".
   iDestruct (struct_fields_split with "Hptr_adtr") as "{Hptr_adtr} H".
   iNamedSuffix "H" "_fld".
   simpl in *.
 
   remember (ktcore.sigpred_cfg.mk _ _ _) as sigpredγ.
-  iDestruct (init_RWMutex
-    (Auditor.own
-      ptr_a
-      (Auditor.mk' (history.mk' digs cut))
-      (cfg.mk servPk sigPk sigpredγ vrf.(server.StartVrf.VrfPk) servGood)
-      (state.mk ep [link]))
-    with "[] [-HΦ Hmu] Hmu") as "H".
+  remember (cfg.mk servPk sigPk sigpredγ vrf.(server.StartVrf.VrfPk) servGood) as γ.
+  remember (state.mk ep [link]) as σ.
+  iDestruct "Hauth_links" as "[Hauth_links0 Hauth_links1]".
+  iMod (inv_alloc nroot _ (∃ σ, own γ σ) with "[Hauth_links0]") as "#Ht".
+  { iExists σ. subst. iFrame "∗#". }
+  iAssert (is_inv γ)%I with "Ht" as "{Ht} #His_inv".
+
+  iMod (init_RWMutex (Auditor.own ptr_a (Auditor.mk' (history.mk' digs cut)) γ σ)
+    with "[-HΦ Hmu] Hmu") as "H".
+  { subst. iModIntro.
+    iFrame "Hptr_hist #∗".
+    simpl in *.
+    iClear "∗#".
+    repeat iSplit; try done.
+    -
 Admitted.
 
 End proof.

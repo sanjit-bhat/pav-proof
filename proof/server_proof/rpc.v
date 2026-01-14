@@ -249,6 +249,20 @@ Proof.
   by simplify_eq/=.
 Qed.
 
+Lemma wish_CheckStartChain_extract servPk chain digs cut ep dig link:
+  wish_CheckStartChain servPk chain digs cut ep dig link -∗
+  "%Hlen_dig" ∷ ⌜length dig = Z.to_nat $ cryptoffi.hash_len⌝ ∗
+  "%Hlast_digs" ∷ ⌜last digs = Some dig⌝.
+Proof.
+  iNamed 1. iPureIntro. subst. split.
+  - destruct His_proof as [Hlens ?].
+    destruct digs1 as [|dig' digs] using rev_ind; [done|clear IHdigs].
+    rewrite last_snoc in Heq_dig.
+    simplify_eq/=.
+    by apply Forall_snoc in Hlens as [? ?].
+  - by rewrite last_app Heq_dig.
+Qed.
+
 Definition wish_CheckStartVrf servPk vrf : iProp Σ :=
   "#His_vrf_pk" ∷ cryptoffi.is_vrf_pk vrf.(server.StartVrf.VrfPk) ∗
   "#His_vrf_sig" ∷ ktcore.wish_VrfSig servPk vrf.(server.StartVrf.VrfPk)
