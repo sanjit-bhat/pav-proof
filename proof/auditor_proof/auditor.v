@@ -98,13 +98,14 @@ Lemma wp_CheckStartChain sl_servPk servPk ptr_chain chain :
     "Hgenie" ∷
       match err with
       | true => ¬ ∃ digs cut ep dig link,
-        wish_CheckStartChain servPk chain digs cut ep dig link
+        server.wish_CheckStartChain servPk chain digs cut ep dig link
       | false =>
         ∃ digs cut dig link,
         "#Hsl_dig" ∷ sl_dig ↦*□ dig ∗
         "#Hsl_link" ∷ sl_link ↦*□ link ∗
-        "#Hwish_CheckStartChain" ∷ wish_CheckStartChain servPk chain
-          digs cut ep dig link
+        "#Hwish_CheckStartChain" ∷ server.wish_CheckStartChain servPk chain
+          digs cut ep dig link ∗
+        "%Hlen_dig" ∷ ⌜length dig = Z.to_nat $ cryptoffi.hash_len⌝
       end
   }}}.
 Proof.
@@ -150,11 +151,15 @@ Proof.
   iDestruct (hashchain.is_chain_hash_len with "His_chain_prev") as %?.
   iApply "HΦ".
   iFrame "#%". simpl in *.
-  iPureIntro. repeat split; [word|].
-  destruct (last _) eqn:Heq; [done|].
-  apply last_None in Heq.
-  apply (f_equal length) in Heq.
-  simpl in *. word.
+  iPureIntro.
+
+  destruct new_vals as [|dig digs] using rev_ind; [|clear IHdigs].
+  { exfalso. simpl in *. word. }
+  rewrite last_snoc /=.
+  autorewrite with len in *.
+  repeat split; [word|].
+  destruct Hwish_chain as [Hlen_digs ?].
+  by apply Forall_snoc in Hlen_digs as [? ?].
 Qed.
 
 Lemma wp_CheckStartVrf sl_servPk servPk ptr_vrf vrf :
@@ -169,9 +174,9 @@ Lemma wp_CheckStartVrf sl_servPk servPk ptr_vrf vrf :
     RET (#ptr_vrfPk, #err);
     "Hgenie" ∷
       match err with
-      | true => ¬ wish_CheckStartVrf servPk vrf
+      | true => ¬ server.wish_CheckStartVrf servPk vrf
       | false =>
-        "#Hwish_CheckStartVrf" ∷ wish_CheckStartVrf servPk vrf ∗
+        "#Hwish_CheckStartVrf" ∷ server.wish_CheckStartVrf servPk vrf ∗
         "#Hown_vrf_pk" ∷ cryptoffi.own_vrf_pk ptr_vrfPk vrf.(server.StartVrf.VrfPk)
       end
   }}}.
@@ -778,8 +783,59 @@ Proof.
     iApply ktcore.blame_one.
     iIntros (?).
     case_match; try done.
+    simplify_eq/=.
     iApply "Hgenie".
     iNamed "Hgood".
+    iFrame "#". }
+  iNamed "Hgenie".
+  wp_apply wp_CheckStartVrf as "* @".
+  { iFrame "#". }
+  wp_if_destruct.
+  { rewrite ktcore.rw_BlameServFull.
+    iApply "HΦ".
+    iSplit. 2: { by case_decide. }
+    iApply ktcore.blame_one.
+    iIntros (?).
+    case_match; try done.
+    simplify_eq/=.
+    iApply "Hgenie".
+    iNamed "Hgood".
+    iFrame "#". }
+  iNamed "Hgenie".
+
+  wp_apply wp_alloc as "* Hmu".
+  iMod (ghost_var_alloc vrf.(server.StartVrf.VrfPk)) as (vrfγ) "H".
+  iMod (ghost_var_persist with "H") as "#Hshot_vrf".
+  iMod (ghost_var_alloc ep) as (start_epγ) "H".
+  iMod (ghost_var_persist with "H") as "#Hshot_start_ep".
+  iMod (mono_list_own_alloc [link]) as (linksγ) "[Hauth_links #Hlb_links]".
+  wp_apply (cryptoffi.wp_SigGenerateKey
+    (ktcore.sigpred (ktcore.sigpred_cfg.mk vrfγ start_epγ linksγ))) as "* @".
+  iDestruct (merkle.is_map_invert dig) as (m) "#His_map"; [word|].
+  iNamed "Hptr_chain".
+  wp_apply ktcore.wp_SignLink as "* @".
+  { iFrame "#".
+    iExists digs, cut, [m].
+    iSplit. { by replace (_ - _)%nat with 0%nat by word. }
+    rewrite /ktcore.sigpred_links_inv /=.
+    iNamed "Hwish_CheckStartChain".
+    simplify_eq/=.
+    iFrame "#".
+    autorewrite with len in *.
+    repeat iSplit; try iPureIntro; try done.
+    - rewrite last_lookup in Heq_dig.
+      apply lookup_lt_Some in Heq_dig.
+      word.
+    - iExactEq "His_chain_start". rewrite /named. f_equal; [|word].
+      rewrite take_ge; [done|len].
+    - replace (_ + _ - _ + _)%nat with (pred $ length (digs0 ++ digs1)); [|len].
+      by rewrite -last_lookup last_app Heq_dig. }
+  wp_apply wp_alloc as "* Hptr_info".
+  iPersist "Hptr_info".
+  wp_apply wp_slice_literal as "* Hsl_epochs".
+  wp_apply wp_alloc as "* Hptr_hist".
+
+
 Admitted.
 
 End proof.
