@@ -85,34 +85,6 @@ Section proof.
 Context `{hG: heapGS Σ, !ffi_semantics _ _, !globalsGS Σ} {go_ctx : GoContext}.
 Context `{!pavG Σ}.
 
-Definition wish_CheckStartChain servPk chain (ep : w64) dig link : iProp Σ :=
-  ∃ digs0 digs1 cut,
-  "%Hlen_link_prev" ∷ ⌜Z.of_nat $ length chain.(server.StartChain.PrevLink) = cryptoffi.hash_len⌝ ∗
-  "#His_chain_prev" ∷ hashchain.is_chain digs0 cut chain.(server.StartChain.PrevLink)
-    (uint.nat chain.(server.StartChain.PrevEpochLen)) ∗
-  "%Hwish_chain" ∷ ⌜hashchain.wish_Proof chain.(server.StartChain.ChainProof) digs1⌝ ∗
-  "#His_chain_start" ∷ hashchain.is_chain (digs0 ++ digs1) cut link
-    (uint.nat chain.(server.StartChain.PrevEpochLen) + length digs1) ∗
-  "%Heq_ep" ∷ ⌜uint.Z chain.(server.StartChain.PrevEpochLen) + length digs1 - 1 = uint.Z ep⌝ ∗
-  "%Heq_dig" ∷ ⌜last digs1 = Some dig⌝ ∗
-  "#His_link_sig" ∷ ktcore.wish_LinkSig servPk ep link chain.(server.StartChain.LinkSig).
-
-Lemma wish_CheckStartChain_det pk c e0 e1 d0 d1 l0 l1 :
-  wish_CheckStartChain pk c e0 d0 l0 -∗
-  wish_CheckStartChain pk c e1 d1 l1 -∗
-  ⌜e0 = e1 ∧ d0 = d1 ∧ l0 = l1⌝.
-Proof.
-  iNamedSuffix 1 "0".
-  iNamedSuffix 1 "1".
-  iDestruct (hashchain.is_chain_inj with "His_chain_prev0 His_chain_prev1") as %[-> ->].
-  opose proof (hashchain.wish_Proof_det _ _ _ Hwish_chain0 Hwish_chain1) as ->.
-  iDestruct (hashchain.is_chain_det with "His_chain_start0 His_chain_start1") as %->.
-  iPureIntro.
-  rewrite Heq_dig0 in Heq_dig1.
-  rewrite Heq_ep0 in Heq_ep1.
-  by simplify_eq/=.
-Qed.
-
 Lemma wp_CheckStartChain sl_servPk servPk ptr_chain chain :
   {{{
     is_pkg_init auditor ∗
@@ -125,12 +97,14 @@ Lemma wp_CheckStartChain sl_servPk servPk ptr_chain chain :
     RET (#ep, #sl_dig, #sl_link, #err);
     "Hgenie" ∷
       match err with
-      | true => ¬ ∃ ep dig link, wish_CheckStartChain servPk chain ep dig link
+      | true => ¬ ∃ digs cut ep dig link,
+        wish_CheckStartChain servPk chain digs cut ep dig link
       | false =>
-        ∃ dig link,
+        ∃ digs cut dig link,
         "#Hsl_dig" ∷ sl_dig ↦*□ dig ∗
         "#Hsl_link" ∷ sl_link ↦*□ link ∗
-        "#Hwish_CheckStartChain" ∷ wish_CheckStartChain servPk chain ep dig link
+        "#Hwish_CheckStartChain" ∷ wish_CheckStartChain servPk chain
+          digs cut ep dig link
       end
   }}}.
 Proof.
@@ -139,7 +113,10 @@ Proof.
   wp_auto.
   iDestruct (own_slice_len with "Hsl_PrevLink") as %[? _].
   wp_if_destruct.
-  2: { iApply "HΦ". iIntros "@". simpl in *. word. }
+  2: {
+    iApply "HΦ". iIntros "@". simpl in *.
+    iDestruct (hashchain.is_chain_hash_len with "His_chain_prev") as %?.
+    word. }
   iDestruct (hashchain.is_chain_invert PrevLink (uint.nat PrevEpochLen))
     as "(%&%&#His_chain_prev)"; [word|].
   wp_apply (hashchain.wp_Verify with "[$His_chain_prev]") as "* @".
@@ -150,7 +127,7 @@ Proof.
   iPersist "Hsl_newVal Hsl_newLink".
   wp_if_destruct.
   { iApply "HΦ". iNamedSuffix 1 "'". simpl in *.
-    opose proof (hashchain.wish_Proof_det _ _ _ Hwish_chain Hwish_chain') as ->.
+    opose proof (hashchain.wish_Proof_det _ _ _ Hwish_chain His_proof') as ->.
     apply last_Some in Heq_dig' as [? Heq].
     apply (f_equal length) in Heq.
     autorewrite with len in *.
@@ -158,31 +135,27 @@ Proof.
   wp_apply std.wp_SumNoOverflow.
   wp_if_destruct.
   2: { iApply "HΦ". iNamedSuffix 1 "'". simpl in *.
-    opose proof (hashchain.wish_Proof_det _ _ _ Hwish_chain Hwish_chain') as ->.
+    opose proof (hashchain.wish_Proof_det _ _ _ Hwish_chain His_proof') as ->.
     word. }
   wp_apply ktcore.wp_VerifyLinkSig as "* @".
   { iFrame "#". }
   wp_if_destruct.
   { iApply "HΦ". iNamedSuffix 1 "'". simpl in *. iApply "Hgenie".
-    opose proof (hashchain.wish_Proof_det _ _ _ Hwish_chain Hwish_chain') as ->.
+    opose proof (hashchain.wish_Proof_det _ _ _ Hwish_chain His_proof') as ->.
     iDestruct (hashchain.is_chain_inj with "His_chain_prev His_chain_prev'") as %[-> ->].
+    simplify_eq/=.
     iDestruct (hashchain.is_chain_det with "His_chain His_chain_start'") as %->.
     iExactEq "His_link_sig'". repeat f_equal. word. }
   iNamed "Hgenie".
   iDestruct (hashchain.is_chain_hash_len with "His_chain_prev") as %?.
   iApply "HΦ".
   iFrame "#%". simpl in *.
-  iPureIntro. split; [word|].
+  iPureIntro. repeat split; [word|].
   destruct (last _) eqn:Heq; [done|].
   apply last_None in Heq.
   apply (f_equal length) in Heq.
   simpl in *. word.
 Qed.
-
-Definition wish_CheckStartVrf servPk vrf : iProp Σ :=
-  "#His_vrf_pk" ∷ cryptoffi.is_vrf_pk vrf.(server.StartVrf.VrfPk) ∗
-  "#His_vrf_sig" ∷ ktcore.wish_VrfSig servPk vrf.(server.StartVrf.VrfPk)
-    vrf.(server.StartVrf.VrfSig).
 
 Lemma wp_CheckStartVrf sl_servPk servPk ptr_vrf vrf :
   {{{

@@ -317,16 +317,16 @@ Definition CallStartⁱᵐᵖˡ : val :=
     do:  ("r" <-[#ptrT] "$r0");;;
     do:  "$r1";;;
     do:  ("errb" <-[#boolT] "$r2");;;
-    let: "$r0" := (![#ptrT] (struct.field_ref #StartReply #"Chain"%go (![#ptrT] "r"))) in
-    do:  ("chain" <-[#ptrT] "$r0");;;
-    let: "$r0" := (![#ptrT] (struct.field_ref #StartReply #"Vrf"%go (![#ptrT] "r"))) in
-    do:  ("vrf" <-[#ptrT] "$r0");;;
     (if: ![#boolT] "errb"
     then
       let: "$r0" := ktcore.BlameServFull in
       do:  ("err" <-[#ktcore.Blame] "$r0");;;
       return: (![#ptrT] "chain", ![#ptrT] "vrf", ![#ktcore.Blame] "err")
     else do:  #());;;
+    let: "$r0" := (![#ptrT] (struct.field_ref #StartReply #"Chain"%go (![#ptrT] "r"))) in
+    do:  ("chain" <-[#ptrT] "$r0");;;
+    let: "$r0" := (![#ptrT] (struct.field_ref #StartReply #"Vrf"%go (![#ptrT] "r"))) in
+    do:  ("vrf" <-[#ptrT] "$r0");;;
     return: (![#ptrT] "chain", ![#ptrT] "vrf", ![#ktcore.Blame] "err")).
 
 Definition CallPut : go_string := "github.com/sanjit-bhat/pav/server.CallPut"%go.
